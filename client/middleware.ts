@@ -18,9 +18,7 @@ export function middleware(req: NextRequest) {
   const hasSession = req.cookies.has("sid")
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
 
-  // In production, enforce session cookie presence on protected routes
-  // In development, allow gentle fallback if explicitly bypassing
-  if (process.env.NODE_ENV === "production" && !hasSession && !isPublic) {
+  if (!hasSession && !isPublic) {
     const loginUrl = new URL("/login", req.url)
     loginUrl.searchParams.set("next", pathname)
     return NextResponse.redirect(loginUrl)

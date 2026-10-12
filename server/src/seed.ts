@@ -3,16 +3,19 @@ import { config } from './config.js';
 import { hashPassword } from './auth/passwords.js';
 import { encryptCredential } from './security/crypto.js';
 
+type SeedUpstream = {
+  slug: string;
+  name: string;
+  url: string;
+  authType: 'none' | 'bearer' | 'header';
+  authHeaderName?: string;
+  token?: string;
+};
+
 /**
- * Bootstrap seed — runs on every startup.
- *
- * 1. Creates the admin user if no users exist.
- * 2. Registers the WooCommerce MCP upstream if not already registered.
- *
- * All operations are idempotent (upsert or create-if-not-exists).
+ * Bootstrap seed — runs on every startup (idempotent).
  */
 export async function seed(): Promise<void> {
-  // 1. Bootstrap admin user
   const userCount = await prisma.user.count();
   if (userCount === 0) {
     const passwordHash = await hashPassword(config.BOOTSTRAP_ADMIN_PASSWORD);
@@ -29,27 +32,54 @@ export async function seed(): Promise<void> {
     console.log(`[seed] Admin user already exists, skipping bootstrap.`);
   }
 
-  // 2. Register WooCommerce MCP server (if WOO_MCP_URL is set and slug doesn't exist)
-  if (config.WOO_MCP_URL) {
-    const existing = await prisma.upstreamServer.findUnique({ where: { slug: 'woo' } });
-    if (!existing) {
-      const credentialEnc = config.WOO_MCP_TOKEN
-        ? encryptCredential(config.WOO_MCP_TOKEN)
+  const upstreams: SeedUpstream[] = [
+    {
+      slug: 'woo',
+      name: 'WooCommerce MCP',
+      url: config.WOO_MCP_URL,
+      authType: 'bearer',
+      token: config.WOO_MCP_TOKEN,
+    },
+    {
+      slug: 'utils',
+      name: 'Utils MCP',
+      url: config.UTILS_MCP_URL,
+      authType: 'none',
+    },
+    {
+      slug: 'notes',
+      name: 'Notes MCP',
+      url: config.NOTES_MCP_URL,
+      authType: 'bearer',
+      token: config.NOTES_MCP_TOKEN,
+    },
+  ];
+
+  for (const upstream of upstreams) {
+    if (!upstream.url) continue;
+
+    const existing = await prisma.upstreamServer.findUnique({ where: { slug: upstream.slug } });
+    if (existing) {
+      console.log(`[seed] Upstream "${upstream.slug}" already registered.`);
+      continue;
+    }
+
+    const credentialEnc =
+      upstream.authType !== 'none' && upstream.token
+        ? (encryptCredential(upstream.token) as Uint8Array<ArrayBuffer>)
         : null;
 
-      await prisma.upstreamServer.create({
-        data: {
-          slug: 'woo',
-          name: 'WooCommerce MCP',
-          url: config.WOO_MCP_URL,
-          authType: 'bearer',
-          credentialEnc,
-          enabled: true,
-        },
-      });
-      console.log(`[seed] ✅ Registered WooCommerce MCP at ${config.WOO_MCP_URL}`);
-    } else {
-      console.log(`[seed] WooCommerce MCP already registered (slug: woo).`);
-    }
+    await prisma.upstreamServer.create({
+      data: {
+        slug: upstream.slug,
+        name: upstream.name,
+        url: upstream.url,
+        authType: upstream.authType,
+        authHeaderName: upstream.authHeaderName ?? null,
+        credentialEnc: credentialEnc ?? undefined,
+        enabled: true,
+      },
+    });
+    console.log(`[seed] ✅ Registered upstream "${upstream.slug}" at ${upstream.url}`);
   }
 }

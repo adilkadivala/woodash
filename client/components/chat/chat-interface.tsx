@@ -17,10 +17,15 @@ import {
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import rehypeSanitize from "rehype-sanitize"
-import type { Conversation, Message } from "@/types/api"
-import { api } from "@/lib/api"
+import type { Conversation } from "@/types/api"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import {
+  useConversations,
+  useCreateConversation,
+  useDeleteConversation,
+  useMessages,
+} from "@/hooks/use-chat"
 
 interface ChatMessage {
   id: string
@@ -37,38 +42,44 @@ const EXAMPLE_PROMPTS = [
 
 export function ChatInterface({
   initialConversationId,
-  initialConversations = [],
-  initialMessages = [],
 }: {
   initialConversationId?: string
-  initialConversations?: Conversation[]
-  initialMessages?: Message[]
 }) {
-  const [conversations, setConversations] = useState<Conversation[]>(
-    initialConversations.length > 0
-      ? initialConversations
-      : [
-          {
-            id: "conv-default",
-            userId: "u-1",
-            title: "Store & Inventory Assistant",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ]
+  const { data: convData, isLoading: convLoading } = useConversations()
+  const createConversation = useCreateConversation()
+  const deleteConversation = useDeleteConversation()
+
+  const conversations = convData?.conversations ?? []
+
+  const [activeConvId, setActiveConvId] = useState<string | undefined>(
+    initialConversationId
   )
 
-  const [activeConvId, setActiveConvId] = useState<string>(
-    initialConversationId || conversations[0]?.id || "conv-default"
-  )
+  useEffect(() => {
+    if (activeConvId) return
+    if (conversations.length > 0) {
+      setActiveConvId(conversations[0].id)
+    }
+  }, [conversations, activeConvId])
 
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    initialMessages.map((m) => ({
-      id: m.id,
-      role: m.role as "user" | "assistant",
-      content: m.content || "",
-    }))
-  )
+  const { data: msgData } = useMessages(activeConvId)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+
+  useEffect(() => {
+    if (!msgData?.messages) {
+      setMessages([])
+      return
+    }
+    setMessages(
+      msgData.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content || "",
+        }))
+    )
+  }, [msgData, activeConvId])
 
   const [input, setInput] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -83,37 +94,48 @@ export function ChatInterface({
     scrollToBottom()
   }, [messages, isStreaming])
 
-  const handleCreateNewChat = () => {
-    const newConv: Conversation = {
-      id: `conv-${Date.now()}`,
-      userId: "u-1",
-      title: "New Conversation",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const handleCreateNewChat = async () => {
+    try {
+      const { conversation } = await createConversation.mutateAsync("New chat")
+      setActiveConvId(conversation.id)
+      setMessages([])
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create conversation")
     }
-    setConversations([newConv, ...conversations])
-    setActiveConvId(newConv.id)
-    setMessages([])
   }
 
   const handleDeleteChat = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    const nextConvs = conversations.filter((c) => c.id !== id)
-    setConversations(nextConvs)
-    if (activeConvId === id) {
-      if (nextConvs.length > 0) {
-        setActiveConvId(nextConvs[0].id)
-        setMessages([])
-      } else {
-        handleCreateNewChat()
-      }
-    }
-    toast.success("Conversation deleted")
+    deleteConversation.mutate(id, {
+      onSuccess: () => {
+        if (activeConvId === id) {
+          const next = conversations.filter((c) => c.id !== id)
+          setActiveConvId(next[0]?.id)
+          setMessages([])
+        }
+        toast.success("Conversation deleted")
+      },
+      onError: (err: Error) => toast.error(err.message || "Failed to delete"),
+    })
   }
 
   const handleSendMessage = async (textToSend?: string) => {
     const content = (textToSend || input).trim()
     if (!content || isStreaming) return
+
+    let convId = activeConvId
+    if (!convId) {
+      try {
+        const { conversation } = await createConversation.mutateAsync(
+          content.slice(0, 36) + (content.length > 36 ? "..." : "")
+        )
+        convId = conversation.id
+        setActiveConvId(convId)
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Failed to start conversation")
+        return
+      }
+    }
 
     setInput("")
 
@@ -135,22 +157,16 @@ export function ChatInterface({
     setIsStreaming(true)
 
     // Update conversation title from first user message if default
-    const activeConv = conversations.find((c) => c.id === activeConvId)
-    if (activeConv && (activeConv.title === "New Conversation" || messages.length === 0)) {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeConvId
-            ? { ...c, title: content.slice(0, 36) + (content.length > 36 ? "..." : "") }
-            : c
-        )
-      )
+    const activeConv = conversations.find((c) => c.id === convId)
+    if (activeConv && (activeConv.title === "New chat" || messages.length === 0)) {
+      /* title updates are cosmetic; server keeps initial title */
     }
 
     const controller = new AbortController()
     abortControllerRef.current = controller
 
     try {
-      const generator = streamChat(activeConvId, content, controller.signal)
+      const generator = streamChat(convId, content, controller.signal)
 
       for await (const event of generator) {
         if (event.type === "token") {
@@ -238,6 +254,9 @@ export function ChatInterface({
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {convLoading && conversations.length === 0 && (
+            <p className="text-xs text-muted-foreground px-2">Loading conversations…</p>
+          )}
           {conversations.map((conv) => {
             const isActive = conv.id === activeConvId
             return (
@@ -245,7 +264,6 @@ export function ChatInterface({
                 key={conv.id}
                 onClick={() => {
                   setActiveConvId(conv.id)
-                  // In real app, fetch messages for this conversation
                 }}
                 className={cn(
                   "group flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer transition-colors",

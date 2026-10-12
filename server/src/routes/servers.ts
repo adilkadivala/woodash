@@ -7,26 +7,44 @@ import { UpstreamClient } from '../upstream/client.js';
 import { encodeToolName } from '../aggregator/naming.js';
 import type { UpstreamManager } from '../upstream/manager.js';
 
+function idParam(raw: string | string[]): string {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+async function toolCountForSlug(manager: UpstreamManager, slug: string): Promise<number> {
+  const client = manager.getClient(slug);
+  if (!client?.isConnected()) return 0;
+  try {
+    const tools = await client.listTools();
+    return tools.length;
+  } catch {
+    return 0;
+  }
+}
+
 export function createServersRouter(manager: UpstreamManager): Router {
   const router = Router();
 
   // List all upstream servers
   router.get('/', requireAuth, async (req, res) => {
     const servers = await prisma.upstreamServer.findMany();
-    const result = servers.map((s: any) => ({
-      id: s.id,
-      slug: s.slug,
-      name: s.name,
-      url: s.url,
-      authType: s.authType,
-      authHeaderName: s.authHeaderName,
-      hasCredential: !!s.credentialEnc,
-      enabled: s.enabled,
-      status: s.status,
-      lastError: s.lastError,
-      lastCheckedAt: s.lastCheckedAt,
-      toolsDigest: s.toolsDigest,
-    }));
+    const result = await Promise.all(
+      servers.map(async (s) => ({
+        id: s.id,
+        slug: s.slug,
+        name: s.name,
+        url: s.url,
+        authType: s.authType,
+        authHeaderName: s.authHeaderName,
+        hasCredential: !!s.credentialEnc,
+        enabled: s.enabled,
+        status: s.enabled ? s.status : 'disabled',
+        lastError: s.lastError,
+        lastCheckedAt: s.lastCheckedAt,
+        toolsDigest: s.toolsDigest,
+        toolCount: s.enabled ? await toolCountForSlug(manager, s.slug) : 0,
+      })),
+    );
     res.json({ servers: result });
   });
 
@@ -47,11 +65,13 @@ export function createServersRouter(manager: UpstreamManager): Router {
     // SSRF check
     const urlCheck = await validateUpstreamUrl(url);
     if (!urlCheck.valid) {
-      res.status(400).json({ error: { code: 'INVALID_URL', message: urlCheck.reason || 'URL blocked by SSRF policy' } });
+      res.status(400).json({ error: { code: 'URL_NOT_ALLOWED', message: urlCheck.reason || 'URL blocked by SSRF policy' } });
       return;
     }
 
-    const credentialEnc = credential ? encryptCredential(credential) : null;
+    const credentialEnc = credential
+      ? (encryptCredential(credential) as Uint8Array<ArrayBuffer>)
+      : null;
 
     try {
       const server = await prisma.upstreamServer.create({
@@ -61,7 +81,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
           url,
           authType: authType || 'none',
           authHeaderName: authHeaderName || null,
-          credentialEnc,
+          credentialEnc: credentialEnc ?? undefined,
           enabled: enabled ?? true,
         },
       });
@@ -86,7 +106,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
       });
     } catch (err: any) {
       if (err.code === 'P2002') {
-        res.status(409).json({ error: { code: 'SLUG_EXISTS', message: `Server with slug "${slug}" already exists` } });
+        res.status(409).json({ error: { code: 'SLUG_TAKEN', message: `Server with slug "${slug}" already exists` } });
       } else {
         res.status(400).json({ error: { code: 'CREATE_FAILED', message: 'Failed to create server' } });
       }
@@ -122,7 +142,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
 
   // Get server detail
   router.get('/:id', requireAuth, async (req, res) => {
-    const server = await prisma.upstreamServer.findUnique({ where: { id: req.params.id } });
+    const server = await prisma.upstreamServer.findUnique({ where: { id: idParam(req.params.id) } });
     if (!server) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Server not found' } });
       return;
@@ -158,7 +178,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
     if (url !== undefined) {
       const urlCheck = await validateUpstreamUrl(url);
       if (!urlCheck.valid) {
-        res.status(400).json({ error: { code: 'INVALID_URL', message: urlCheck.reason } });
+        res.status(400).json({ error: { code: 'URL_NOT_ALLOWED', message: urlCheck.reason } });
         return;
       }
       data.url = url;
@@ -169,7 +189,10 @@ export function createServersRouter(manager: UpstreamManager): Router {
     }
 
     try {
-      const server = await prisma.upstreamServer.update({ where: { id: req.params.id }, data });
+      const server = await prisma.upstreamServer.update({ where: { id: idParam(req.params.id) }, data });
+      if (server.enabled) {
+        await manager.refreshServer(server.slug);
+      }
       res.json({
         server: {
           id: server.id, slug: server.slug, name: server.name, url: server.url,
@@ -185,7 +208,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
   // Enable server
   router.post('/:id/enable', requireAuth, requireRole('admin'), async (req, res) => {
     try {
-      const server = await prisma.upstreamServer.update({ where: { id: req.params.id }, data: { enabled: true } });
+      const server = await prisma.upstreamServer.update({ where: { id: idParam(req.params.id) }, data: { enabled: true } });
       await manager.enableServer(server.slug);
       res.json({ server: { id: server.id, slug: server.slug, name: server.name, enabled: true, status: server.status } });
     } catch {
@@ -196,7 +219,10 @@ export function createServersRouter(manager: UpstreamManager): Router {
   // Disable server
   router.post('/:id/disable', requireAuth, requireRole('admin'), async (req, res) => {
     try {
-      const server = await prisma.upstreamServer.update({ where: { id: req.params.id }, data: { enabled: false } });
+      const server = await prisma.upstreamServer.update({
+        where: { id: idParam(req.params.id) },
+        data: { enabled: false, status: 'disabled' },
+      });
       await manager.disableServer(server.slug);
       res.json({ server: { id: server.id, slug: server.slug, name: server.name, enabled: false, status: server.status } });
     } catch {
@@ -206,19 +232,19 @@ export function createServersRouter(manager: UpstreamManager): Router {
 
   // Refresh server (reconnect + re-list tools)
   router.post('/:id/refresh', requireAuth, requireRole('admin'), async (req, res) => {
-    const server = await prisma.upstreamServer.findUnique({ where: { id: req.params.id } });
+    const server = await prisma.upstreamServer.findUnique({ where: { id: idParam(req.params.id) } });
     if (!server) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Server not found' } });
       return;
     }
     await manager.refreshServer(server.slug);
-    const updated = await prisma.upstreamServer.findUnique({ where: { id: req.params.id } });
+    const updated = await prisma.upstreamServer.findUnique({ where: { id: idParam(req.params.id) } });
     res.json({ server: { id: updated!.id, slug: updated!.slug, name: updated!.name, enabled: updated!.enabled, status: updated!.status } });
   });
 
   // List tools for a specific server
   router.get('/:id/tools', requireAuth, async (req, res) => {
-    const server = await prisma.upstreamServer.findUnique({ where: { id: req.params.id } });
+    const server = await prisma.upstreamServer.findUnique({ where: { id: idParam(req.params.id) } });
     if (!server) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Server not found' } });
       return;
@@ -245,13 +271,13 @@ export function createServersRouter(manager: UpstreamManager): Router {
 
   // Delete server
   router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
-    const server = await prisma.upstreamServer.findUnique({ where: { id: req.params.id } });
+    const server = await prisma.upstreamServer.findUnique({ where: { id: idParam(req.params.id) } });
     if (!server) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Server not found' } });
       return;
     }
     await manager.removeServer(server.slug);
-    await prisma.upstreamServer.delete({ where: { id: req.params.id } });
+    await prisma.upstreamServer.delete({ where: { id: idParam(req.params.id) } });
     res.status(204).end();
   });
 

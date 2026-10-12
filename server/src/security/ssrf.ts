@@ -1,5 +1,6 @@
 import dns from 'node:dns';
 import net from 'node:net';
+import { config } from '../config.js';
 
 const IP_RANGES = [
     // Loopback
@@ -29,7 +30,10 @@ export async function validateUpstreamUrl(urlString: string): Promise<{ valid: b
         
         const hostname = url.hostname;
         
-        if (hostname === 'localhost') {
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            if (config.SSRF_ALLOW_LOCALHOST && config.NODE_ENV !== 'production') {
+                return { valid: true };
+            }
             return { valid: false, reason: 'Blocked loopback address' };
         }
         

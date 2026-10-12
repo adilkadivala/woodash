@@ -12,6 +12,15 @@ export function startHealthLoop(manager: UpstreamManager): NodeJS.Timeout {
 
     for (const [slug, client] of clients) {
       try {
+        const row = await prisma.upstreamServer.findUnique({ where: { slug } });
+        if (row && !row.enabled) {
+          await prisma.upstreamServer.update({
+            where: { slug },
+            data: { status: 'disabled', lastCheckedAt: new Date() },
+          });
+          continue;
+        }
+
         if (!client.isConnected()) {
           try {
             await client.connect();

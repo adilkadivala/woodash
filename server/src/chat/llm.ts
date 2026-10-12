@@ -53,7 +53,15 @@ export async function chatCompletion(
     throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${text}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    choices: Array<{
+      message: {
+        content?: string | null;
+        tool_calls?: LlmResponse['tool_calls'];
+      };
+      finish_reason: string;
+    }>;
+  };
   const choice = data.choices[0];
 
   return {

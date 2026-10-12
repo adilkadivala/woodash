@@ -28,7 +28,7 @@ function getKey(): Buffer {
  * Encrypt a credential string using AES-256-GCM.
  * Returns a Buffer containing: iv (12 bytes) || authTag (16 bytes) || ciphertext
  */
-export function encryptCredential(plaintext: string): Buffer {
+export function encryptCredential(plaintext: string): Uint8Array {
   const key = getKey();
   const iv = crypto.randomBytes(IV_LENGTH);
 
@@ -40,23 +40,24 @@ export function encryptCredential(plaintext: string): Buffer {
   const authTag = cipher.getAuthTag();
 
   // Pack: iv || authTag || ciphertext
-  return Buffer.concat([iv, authTag, encrypted]);
+  return new Uint8Array(Buffer.concat([iv, authTag, encrypted]));
 }
 
 /**
  * Decrypt a credential that was encrypted with encryptCredential.
  * Expects a Buffer in the format: iv (12 bytes) || authTag (16 bytes) || ciphertext
  */
-export function decryptCredential(encrypted: Buffer): string {
-  if (encrypted.length < IV_LENGTH + TAG_LENGTH + 1) {
+export function decryptCredential(encrypted: Uint8Array): string {
+  const buf = Buffer.from(encrypted);
+  if (buf.length < IV_LENGTH + TAG_LENGTH + 1) {
     throw new Error('Encrypted credential is too short to be valid');
   }
 
   const key = getKey();
 
-  const iv = encrypted.subarray(0, IV_LENGTH);
-  const authTag = encrypted.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
-  const ciphertext = encrypted.subarray(IV_LENGTH + TAG_LENGTH);
+  const iv = buf.subarray(0, IV_LENGTH);
+  const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = buf.subarray(IV_LENGTH + TAG_LENGTH);
 
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);

@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+      POSTGRES_DB: gateway
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  woo-mcp:
+    build:
+      context: .
+      dockerfile: woo-mcp/Dockerfile
+    environment:
+      PORT: 4011
+      MCP_BEARER_TOKEN: woo-mcp-bearer-token
+      WOO_USE_MOCK: "true"
+    ports:
+      - "4011:4011"
+
+  utils-mcp:
+    build:
+      context: .
+      dockerfile: utils-mcp/Dockerfile
+    environment:
+      PORT: 4002
+    ports:
+      - "4002:4002"
+
+  notes-mcp:
+    build:
+      context: .
+      dockerfile: notes-mcp/Dockerfile
+    environment:
+      PORT: 4003
+      MCP_BEARER_TOKEN: notes-mcp-bearer-token
+    ports:
+      - "4003:4003"
+
+  gateway:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      woo-mcp:
+        condition: service_started
+      utils-mcp:
+        condition: service_started
+      notes-mcp:
+        condition: service_started
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://gateway:gateway@postgres:5432/gateway
+      SESSION_SECRET: dev-session-secret-change-in-production-please!!
+      CREDENTIAL_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CORS_ORIGIN: http://localhost:3000
+      WOO_MCP_URL: http://woo-mcp:4011/mcp
+      WOO_MCP_TOKEN: woo-mcp-bearer-token
+      UTILS_MCP_URL: http://utils-mcp:4002/mcp
+      NOTES_MCP_URL: http://notes-mcp:4003/mcp
+      NOTES_MCP_TOKEN: notes-mcp-bearer-token
+      SSRF_ALLOW_LOCALHOST: "false"
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    ports:
+      - "4000:4000"
+
+  dashboard:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    depends_on:
+      - gateway
+    environment:
+      SERVER_GATEWAY_URL: http://gateway:4000
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

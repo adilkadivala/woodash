@@ -31,8 +31,15 @@ const configSchema = z.object({
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).default('admin12345678'),
 
   // WooCommerce MCP server (pre-registered upstream)
-  WOO_MCP_URL: z.string().default('http://localhost:4001'),
+  WOO_MCP_URL: z.string().default('http://127.0.0.1:4011/mcp'),
   WOO_MCP_TOKEN: z.string().default('woo-mcp-bearer-token'),
+
+  UTILS_MCP_URL: z.string().default('http://127.0.0.1:4002/mcp'),
+  NOTES_MCP_URL: z.string().default('http://127.0.0.1:4003/mcp'),
+  NOTES_MCP_TOKEN: z.string().default('notes-mcp-bearer-token'),
+
+  /** Allow http://127.0.0.1 / localhost upstream URLs when registering servers (local dev). */
+  SSRF_ALLOW_LOCALHOST: z.coerce.boolean().default(true),
 
   // Cookie settings
   COOKIE_DOMAIN: z.string().optional(),

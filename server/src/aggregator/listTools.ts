@@ -1,6 +1,8 @@
 import { UpstreamManager } from '../upstream/manager.js';
 import { encodeToolName } from './naming.js';
 import type { Principal } from '../auth/principal.js';
+import { prisma } from '../db/client.js';
+import { checkPolicy } from '../policy/engine.js';
 
 export interface AggregatedTool {
   name: string;
@@ -16,7 +18,12 @@ export async function listAllTools(
 ): Promise<AggregatedTool[]> {
   const slugs = manager.getAllSlugs();
   const tools: AggregatedTool[] = [];
-  
+  const serverMeta = await prisma.upstreamServer.findMany({
+    where: { slug: { in: slugs } },
+    select: { slug: true, name: true },
+  });
+  const nameBySlug = new Map(serverMeta.map((s) => [s.slug, s.name]));
+
   const promises = slugs.map(async (slug) => {
     const client = manager.getClient(slug);
     const breaker = manager.getBreaker(slug);
@@ -37,13 +44,19 @@ export async function listAllTools(
       
       if (breaker) breaker.recordSuccess();
       
-      return serverTools.map(t => ({
-        name: encodeToolName(slug, t.name),
-        description: t.description,
-        inputSchema: t.inputSchema,
-        serverSlug: slug,
-        serverName: slug
-      }));
+      const filtered = [];
+      for (const t of serverTools) {
+        const decision = await checkPolicy(principal, slug, t.name);
+        if (decision === 'deny') continue;
+        filtered.push({
+          name: encodeToolName(slug, t.name),
+          description: t.description,
+          inputSchema: t.inputSchema,
+          serverSlug: slug,
+          serverName: nameBySlug.get(slug) ?? slug,
+        });
+      }
+      return filtered;
     } catch (error) {
       console.error(`Error listing tools for ${slug}:`, error);
       if (breaker) breaker.recordFailure();

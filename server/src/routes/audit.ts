@@ -40,6 +40,10 @@ export function createAuditRouter(): Router {
       take: queryLimit + 1,
       ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
       orderBy: { id: 'desc' },
+      include: {
+        user: { select: { name: true, email: true } },
+        apiKey: { select: { keyPrefix: true } },
+      },
     });
 
     let nextCursor: number | undefined;

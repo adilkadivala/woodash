@@ -163,16 +163,29 @@ export class UpstreamManager {
    * Reconnect a server — disconnect then reconnect.
    */
   async refreshServer(slug: string): Promise<void> {
-    const client = this.clients.get(slug);
-    if (client) {
+    const server = await prisma.upstreamServer.findUnique({ where: { slug } });
+    if (!server || !server.enabled) {
+      await this.removeServer(slug);
+      return;
+    }
+
+    let credential: string | undefined;
+    if (server.credentialEnc) {
       try {
-        await client.disconnect();
-        await client.connect();
-        console.log(`[upstream] Refreshed ${slug}`);
-      } catch (error) {
-        console.error(`[upstream] Error refreshing ${slug}:`, error);
+        credential = decryptCredential(server.credentialEnc);
+      } catch (err) {
+        console.error(`[upstream] Failed to decrypt credential for ${slug}:`, err);
       }
     }
+
+    await this.addServer(
+      server.slug,
+      server.url,
+      server.authType,
+      server.authHeaderName ?? undefined,
+      credential,
+    );
+    console.log(`[upstream] Refreshed ${slug}`);
   }
 
   /**

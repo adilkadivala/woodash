@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import { stringifyCookie } from 'cookie';
+import { stringifySetCookie } from 'cookie';
 import { prisma } from '../db/client.js';
 import { config } from '../config.js';
 import { hashPassword, verifyPassword } from '../auth/passwords.js';
@@ -45,11 +45,13 @@ router.post('/login', async (req, res) => {
   const sessionId = await createSession(user.id);
 
   // Set cookie
-  res.setHeader('Set-Cookie', serialize('sid', sessionId, {
+  res.setHeader('Set-Cookie', stringifySetCookie({
+    name: 'sid',
+    value: sessionId,
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: 7 * 24 * 60 * 60,
     secure: config.COOKIE_SECURE,
     ...(config.COOKIE_DOMAIN ? { domain: config.COOKIE_DOMAIN } : {}),
   }));
@@ -76,7 +78,9 @@ router.post('/logout', requireSession, async (req, res) => {
   }
 
   // Clear cookie
-  res.setHeader('Set-Cookie', serialize('sid', '', {
+  res.setHeader('Set-Cookie', stringifySetCookie({
+    name: 'sid',
+    value: '',
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
@@ -178,7 +182,9 @@ router.post('/accept-invite', async (req, res) => {
   // Auto-login: create session and set cookie
   const sessionId = await createSession(user.id);
 
-  res.setHeader('Set-Cookie', serialize('sid', sessionId, {
+  res.setHeader('Set-Cookie', stringifySetCookie({
+    name: 'sid',
+    value: sessionId,
     httpOnly: true,
     sameSite: 'lax',
     path: '/',

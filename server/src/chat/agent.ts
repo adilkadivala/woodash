@@ -118,27 +118,47 @@ Always explain what you're doing and present results clearly.`
           sendEvent(res, 'tool_call', {
             id: tc.id,
             name: tc.function.name,
-            arguments: tc.function.arguments
+            arguments: tc.function.arguments,
           });
 
           const args = parseFunctionArgs(tc.function.arguments);
           let toolResultContent: string;
-          
+          const toolStart = Date.now();
+          let ok = true;
+
           try {
             const toolResult = await executeTool(manager, principal, tc.function.name, args, { via: 'chat' });
-            
+
             if (toolResult.isError) {
+              ok = false;
               toolResultContent = JSON.stringify({ error: true, content: toolResult.content });
             } else {
               toolResultContent = JSON.stringify(toolResult.content);
             }
           } catch (err: any) {
+            ok = false;
             toolResultContent = JSON.stringify({ error: true, message: err.message });
+          }
+
+          const durationMs = Date.now() - toolStart;
+          let summary = toolResultContent.slice(0, 240);
+          try {
+            const parsed = JSON.parse(toolResultContent);
+            const textPart = Array.isArray(parsed)
+              ? parsed.find((p: { type?: string; text?: string }) => p.type === 'text')?.text
+              : parsed?.content?.[0]?.text ?? parsed?.message;
+            if (typeof textPart === 'string') summary = textPart.slice(0, 240);
+          } catch {
+            /* keep raw summary */
           }
 
           sendEvent(res, 'tool_result', {
             id: tc.id,
-            result: toolResultContent
+            name: tc.function.name,
+            ok,
+            durationMs,
+            result: toolResultContent,
+            summary,
           });
 
           messages.push({
