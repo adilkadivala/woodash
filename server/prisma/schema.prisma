@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────── Users & Auth ───────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  role         String   @default("member") // 'admin' | 'member'
+  disabled     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions      Session[]
+  apiKeys       ApiKey[]
+  invitationsSent Invitation[] @relation("InvitedBy")
+  auditLogs     AuditLog[]
+  conversations Conversation[]
+
+  @@map("users")
+}
+
+model Invitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String
+  role       String    @default("member")
+  tokenHash  String    @unique @map("token_hash")
+  invitedBy  String    @map("invited_by") @db.Uuid
+  expiresAt  DateTime  @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  inviter User @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@map("invitations")
+}
+
+model Session {
+  id        String   @id // random 256-bit hex string
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  name       String
+  keyPrefix  String    @map("key_prefix") // e.g. "kgw_ab12cd" (display only)
+  keyHash    String    @unique @map("key_hash") // SHA-256 of the full key
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ─────────────── Upstream MCP Servers ───────────────
+
+model UpstreamServer {
+  id             String    @id @default(uuid()) @db.Uuid
+  slug           String    @unique // lowercase, no "__", e.g. "woo", "utils"
+  name           String
+  url            String
+  enabled        Boolean   @default(true)
+  authType       String    @default("none") @map("auth_type") // 'none' | 'bearer' | 'header'
+  authHeaderName String?   @map("auth_header_name")
+  credentialEnc  Bytes?    @map("credential_enc") // AES-GCM encrypted credential
+  status         String    @default("unreachable") // 'connected' | 'unreachable' | 'disabled'
+  lastError      String?   @map("last_error")
+  lastCheckedAt  DateTime? @map("last_checked_at")
+  toolsDigest    String?   @map("tools_digest") // hash of tool declarations
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("upstream_servers")
+}
+
+// ─────────────── Audit ───────────────
+
+model AuditLog {
+  id           Int       @id @default(autoincrement())
+  ts           DateTime  @default(now())
+  userId       String?   @map("user_id") @db.Uuid
+  apiKeyId     String?   @map("api_key_id") @db.Uuid
+  via          String    // 'mcp' | 'chat' | 'dashboard'
+  serverSlug   String?   @map("server_slug")
+  toolName     String?   @map("tool_name")
+  argsHash     String?   @map("args_hash") // hash only, never raw args
+  durationMs   Int?      @map("duration_ms")
+  outcome      String    // 'success' | 'error' | 'denied' | 'timeout'
+  errorCode    String?   @map("error_code")
+  errorMessage String?   @map("error_message")
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([ts(sort: Desc)])
+  @@index([userId, ts(sort: Desc)])
+  @@index([serverSlug, ts(sort: Desc)])
+  @@index([outcome, ts(sort: Desc)])
+  @@map("audit_log")
+}
+
+// ─────────────── Chat ───────────────
+
+model Conversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String   @default("New chat")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String   // 'user' | 'assistant' | 'tool'
+  content        String?
+  toolCalls      Json?    @map("tool_calls") // [{id, name, args, result, outcome}]
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ─────────────── Bonus: Tool Permissions ───────────────
+
+model ToolPolicy {
+  id          String   @id @default(uuid()) @db.Uuid
+  role        String   // 'admin' | 'member'
+  serverSlug  String   @map("server_slug") // '*' = all servers
+  toolPattern String   @default("*") @map("tool_pattern") // glob pattern
+  effect      String   // 'allow' | 'deny'
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([role, serverSlug, toolPattern])
+  @@map("tool_policies")
+}
