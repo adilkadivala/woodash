@@ -1,7 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import dotenv from 'dotenv';
 import * as z from 'zod/v4';
 import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
 import * as woo from './wooClient.js';
+
+dotenv.config();
 
 const ORDER_STATUSES = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded'] as const;
 
@@ -85,7 +88,7 @@ function buildMcpServer(): McpServer {
   return server;
 }
 
-const port = Number(process.env.PORT || 4011);
+const port = Number(process.env.PORT || 4001);
 const app = createMcpHttpApp({
   bearerToken: process.env.MCP_BEARER_TOKEN || 'woo-mcp-bearer-token',
   createServer: buildMcpServer,

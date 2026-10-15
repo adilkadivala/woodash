@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, MOCK_MEMBERS } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
 import type { Invitation, Role, User } from "@/types/api"
 import { toast } from "sonner"
 
@@ -13,7 +14,7 @@ export function useMembers() {
     queryFn: () => api<{ members: User[] }>("/members"),
   })
 
-  const members = data?.members || MOCK_MEMBERS
+  const members = data?.members ?? (useMockApi ? MOCK_MEMBERS : [])
 
   const inviteMutation = useMutation({
     mutationFn: (body: { email: string; role: Role }) =>

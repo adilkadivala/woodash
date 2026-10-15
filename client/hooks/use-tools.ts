@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { api, MOCK_TOOLS } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
 import type { Tool } from "@/types/api"
 
 export function useTools() {
@@ -11,7 +12,7 @@ export function useTools() {
     staleTime: 15 * 1000,
   })
 
-  const tools = data?.tools || MOCK_TOOLS
+  const tools = data?.tools ?? (useMockApi ? MOCK_TOOLS : [])
 
   return {
     tools,

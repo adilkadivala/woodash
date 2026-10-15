@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import dotenv from 'dotenv';
 import * as z from 'zod/v4';
 import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
 import * as store from './store.js';
+
+
+dotenv.config();
 
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: 'notes-mcp', version: '1.0.0' }, { capabilities: {} });

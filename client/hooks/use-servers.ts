@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, MOCK_SERVERS } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
 import type { UpstreamServer } from "@/types/api"
 import { toast } from "sonner"
 
@@ -14,7 +15,7 @@ export function useServers() {
     refetchInterval: 10000, // Poll every 10s as specified in architecture doc
   })
 
-  const servers = data?.servers || MOCK_SERVERS
+  const servers = data?.servers ?? (useMockApi ? MOCK_SERVERS : [])
 
   const enableMutation = useMutation({
     mutationFn: (id: string) => api(`/servers/${id}/enable`, { method: "POST" }),

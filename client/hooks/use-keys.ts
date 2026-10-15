@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, MOCK_KEYS } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
 import type { ApiKey } from "@/types/api"
 import { toast } from "sonner"
 
@@ -13,7 +14,7 @@ export function useKeys() {
     queryFn: () => api<{ keys: ApiKey[] }>("/keys"),
   })
 
-  const keys = data?.keys || MOCK_KEYS
+  const keys = data?.keys ?? (useMockApi ? MOCK_KEYS : [])
 
   const createMutation = useMutation({
     mutationFn: (name: string) =>

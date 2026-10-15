@@ -33,8 +33,8 @@ docker compose up -d postgres
 ### 2. Gateway
 
 ```bash
-cp server/.env.example server/.env   # edit DATABASE_URL / secrets if needed
-cd server
+cd ~/projects/woocommerce/server
+cp -n .env.example .env   # edit DATABASE_URL / secrets if needed
 bun install
 bunx prisma db push
 bun run dev
@@ -47,12 +47,17 @@ Bootstrap admin (first boot):
 
 ### 3. Upstream MCP servers
 
-In separate terminals:
+Use **one terminal per service** (each command blocks). Run from the repo root, e.g. `cd ~/projects/woocommerce` first — do not chain `cd woo-mcp && … && cd utils-mcp` in a single shell after woo-mcp starts.
 
 ```bash
-cd woo-mcp && bun install && bun run src/index.ts    # http://127.0.0.1:4011/mcp
-cd utils-mcp && bun install && bun run src/index.ts  # :4002
-cd notes-mcp && bun install && bun run src/index.ts    # :4003
+# Terminal A
+cd ~/projects/woocommerce/woo-mcp && bun install && bun run src/index.ts    # :4011/mcp
+
+# Terminal B
+cd ~/projects/woocommerce/utils-mcp && bun install && bun run src/index.ts  # :4002
+
+# Terminal C
+cd ~/projects/woocommerce/notes-mcp && bun install && bun run src/index.ts    # :4003
 ```
 
 > **Note:** Default Woo MCP port is **4011** to avoid clashing with other services on 4001.
@@ -62,10 +67,13 @@ After changing upstream URLs, use **Servers → Refresh** in the dashboard or `P
 ### 4. Dashboard
 
 ```bash
-cd client
+cd ~/projects/woocommerce/client
+cp -n .env.example .env
 npm install
 npm run dev
 ```
+
+The dashboard proxies `/api/*` to the gateway via Next.js route handlers (`SERVER_GATEWAY_URL`, default `http://127.0.0.1:4000`). Set `NEXT_PUBLIC_USE_MOCK_API=true` only if you want offline demo data without the server.
 
 Open [http://localhost:3000](http://localhost:3000), log in, and use Servers, Tools, Keys, Chat, and Audit.
 

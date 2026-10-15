@@ -1,7 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import dotenv from 'dotenv';
 import * as z from 'zod/v4';
 import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
 import { evaluateExpression } from './calc.js';
+
+dotenv.config();
 
 const FX: Record<string, Record<string, number>> = {
   USD: { EUR: 0.92, GBP: 0.79, JPY: 150.2 },

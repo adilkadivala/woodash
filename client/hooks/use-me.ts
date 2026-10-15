@@ -1,7 +1,9 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api, MOCK_USER } from "@/lib/api"
+import { api } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
+import { MOCK_USER } from "@/lib/api"
 import type { User } from "@/types/api"
 import { useRouter } from "next/navigation"
 
@@ -23,7 +25,7 @@ export function useMe() {
     },
   })
 
-  const user = data?.user || MOCK_USER
+  const user = data?.user ?? (useMockApi ? MOCK_USER : undefined)
   const isAdmin = user?.role === "admin"
 
   return {

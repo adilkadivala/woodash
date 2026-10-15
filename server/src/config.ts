@@ -3,6 +3,21 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/** Parse env booleans correctly (`"false"` must not become true). */
+function envBool(defaultValue: boolean) {
+  return z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return defaultValue;
+      if (typeof v === 'boolean') return v;
+      const s = v.trim().toLowerCase();
+      if (s === 'true' || s === '1' || s === 'yes') return true;
+      if (s === 'false' || s === '0' || s === 'no' || s === '') return false;
+      return defaultValue;
+    });
+}
+
 /**
  * Application configuration parsed from environment variables.
  * Fails fast on missing required secrets.
@@ -39,11 +54,11 @@ const configSchema = z.object({
   NOTES_MCP_TOKEN: z.string().default('notes-mcp-bearer-token'),
 
   /** Allow http://127.0.0.1 / localhost upstream URLs when registering servers (local dev). */
-  SSRF_ALLOW_LOCALHOST: z.coerce.boolean().default(true),
+  SSRF_ALLOW_LOCALHOST: envBool(true),
 
   // Cookie settings
   COOKIE_DOMAIN: z.string().optional(),
-  COOKIE_SECURE: z.coerce.boolean().default(false),
+  COOKIE_SECURE: envBool(false),
 
   // CORS
   CORS_ORIGIN: z.string().default('http://localhost:3000'),

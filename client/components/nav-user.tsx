@@ -25,7 +25,11 @@ import Link from "next/link"
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const { user, isAdmin, logout } = useMe()
+  const { user, isAdmin, logout, isLoading } = useMe()
+
+  if (isLoading || !user) {
+    return null
+  }
 
   const initials = user.name
     ? user.name

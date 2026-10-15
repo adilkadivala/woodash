@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { api, MOCK_AUDIT } from "@/lib/api"
+import { useMockApi } from "@/lib/gateway"
 import type { AuditRow } from "@/types/api"
 import { useState } from "react"
 
@@ -31,7 +32,7 @@ export function useAudit(filters?: AuditFilters, autoRefresh = false) {
     refetchInterval: autoRefresh ? 5000 : false, // 5s live polling toggle
   })
 
-  const logs = data?.logs || MOCK_AUDIT
+  const logs = data?.logs ?? (useMockApi ? MOCK_AUDIT : [])
   const nextCursor = data?.cursor
 
   return {

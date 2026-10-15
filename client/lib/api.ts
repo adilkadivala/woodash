@@ -2,11 +2,11 @@ import type {
   ApiKey,
   AuditRow,
   Conversation,
-  Message,
   Tool,
   UpstreamServer,
   User,
 } from "@/types/api"
+import { useMockApi } from "@/lib/gateway"
 
 export class ApiError extends Error {
   constructor(
@@ -328,9 +328,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     return res.status === 204 ? (undefined as T) : res.json()
   } catch (err) {
     if (err instanceof ApiError) throw err
-
-    // If fetch failed completely (e.g. backend offline during standalone preview)
-    // fallback gracefully to mock fixtures to keep UI fully responsive
+    if (!useMockApi) {
+      throw new ApiError(
+        502,
+        "GATEWAY_UNREACHABLE",
+        "Cannot reach the gateway. Start Postgres and run `bun run dev` in server/."
+      )
+    }
     return getFallbackData<T>(path, init)
   }
 }
