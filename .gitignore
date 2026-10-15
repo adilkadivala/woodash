@@ -87,6 +87,10 @@ server/.env.test.local
 server/.env.production.local
 server/.env.local
 
+charts/platform/secrets.local.yaml
+secrets.yaml
+secrets.prod.yaml
+
 
 backend-architecture.md/
 frontend-architecture.md/

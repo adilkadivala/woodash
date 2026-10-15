@@ -1,0 +1,18 @@
+# Kind / local Kubernetes. Domains use localtest.me → 127.0.0.1
+# Ingress: kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
+
+ingress:
+  enabled: true
+  className: nginx
+  tls: false
+  storeHost: store.localtest.me
+  appHost: app.localtest.me
+
+storageClass: standard
+
+images:
+  gateway: { repository: mcp-gateway, tag: local, pullPolicy: IfNotPresent }
+  dashboard: { repository: mcp-dashboard, tag: local, pullPolicy: IfNotPresent }
+  wooMcp: { repository: mcp-woo, tag: local, pullPolicy: IfNotPresent }
+  utilsMcp: { repository: mcp-utils, tag: local, pullPolicy: IfNotPresent }
+  notesMcp: { repository: mcp-notes, tag: local, pullPolicy: IfNotPresent }

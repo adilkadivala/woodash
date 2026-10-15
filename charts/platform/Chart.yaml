@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform
+description: WooCommerce store + team MCP gateway (dashboard, backend, three MCP servers)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

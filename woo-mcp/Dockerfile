@@ -5,5 +5,5 @@ COPY mcp-servers ./mcp-servers
 WORKDIR /app/woo-mcp
 RUN bun install
 COPY woo-mcp/src ./src
-EXPOSE 4011
+EXPOSE 4001
 CMD ["bun", "run", "src/index.ts"]

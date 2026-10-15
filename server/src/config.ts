@@ -36,10 +36,10 @@ const configSchema = z.object({
   // Credential encryption key (32 bytes hex = 64 hex chars)
   CREDENTIAL_ENC_KEY: z.string().min(32).default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
 
-  // LLM
+  // LLM (OpenRouter by default; any OpenAI-compatible /v1 works)
   LLM_API_KEY: z.string().default(''),
-  LLM_MODEL: z.string().default('gpt-4o-mini'),
-  LLM_BASE_URL: z.string().default('https://api.openai.com/v1'),
+  LLM_MODEL: z.string().default('openai/gpt-4o-mini'),
+  LLM_BASE_URL: z.string().default('https://openrouter.ai/api/v1'),
 
   // Bootstrap admin (seeded on first boot)
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().default('admin@gateway.local'),

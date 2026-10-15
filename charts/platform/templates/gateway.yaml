@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+    app: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: "{{ .Values.images.gateway.repository }}:{{ .Values.images.gateway.tag }}"
+          imagePullPolicy: {{ .Values.images.gateway.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.gateway.port }}
+              name: http
+          env:
+            - name: PORT
+              value: {{ .Values.gateway.port | quote }}
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: gateway-db, key: DATABASE_URL }
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: SESSION_SECRET }
+            - name: CREDENTIAL_ENC_KEY
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: CREDENTIAL_ENC_KEY }
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: BOOTSTRAP_ADMIN_EMAIL }
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: BOOTSTRAP_ADMIN_PASSWORD }
+            - name: WOO_MCP_TOKEN
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: WOO_MCP_TOKEN }
+            - name: NOTES_MCP_TOKEN
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: NOTES_MCP_TOKEN }
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef: { name: gateway-app, key: LLM_API_KEY }
+            - name: LLM_MODEL
+              value: {{ .Values.llm.model | quote }}
+            - name: LLM_BASE_URL
+              value: {{ .Values.llm.baseUrl | quote }}
+            - name: WOO_MCP_URL
+              value: "http://woo-mcp:{{ .Values.wooMcp.port }}/mcp"
+            - name: UTILS_MCP_URL
+              value: "http://utils-mcp:{{ .Values.utilsMcp.port }}/mcp"
+            - name: NOTES_MCP_URL
+              value: "http://notes-mcp:{{ .Values.notesMcp.port }}/mcp"
+            - name: CORS_ORIGIN
+              value: "http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.appHost }}"
+            - name: COOKIE_SECURE
+              value: {{ .Values.ingress.tls | quote }}
+            - name: SSRF_ALLOW_LOCALHOST
+              value: "false"
+          {{- include "platform.resources" .Values.gateway.resources | nindent 10 }}
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+    app: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: gateway
+  ports:
+    - port: {{ .Values.gateway.port }}
+      targetPort: http
+      name: http

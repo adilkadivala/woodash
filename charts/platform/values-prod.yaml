@@ -1,0 +1,30 @@
+# k3s / VPS. Override hosts, storageClass, and pass secrets via -f secrets.yaml.
+# TLS: install cert-manager and set clusterIssuer (e.g. letsencrypt-prod).
+
+ingress:
+  enabled: true
+  className: nginx
+  tls: true
+  clusterIssuer: letsencrypt-prod
+  storeHost: store.example.com
+  appHost: app.example.com
+
+# k3s default provisioner
+storageClass: local-path
+
+images:
+  gateway: { repository: ghcr.io/example/mcp-gateway, tag: "1.0.0", pullPolicy: IfNotPresent }
+  dashboard: { repository: ghcr.io/example/mcp-dashboard, tag: "1.0.0", pullPolicy: IfNotPresent }
+  wooMcp: { repository: ghcr.io/example/mcp-woo, tag: "1.0.0", pullPolicy: IfNotPresent }
+  utilsMcp: { repository: ghcr.io/example/mcp-utils, tag: "1.0.0", pullPolicy: IfNotPresent }
+  notesMcp: { repository: ghcr.io/example/mcp-notes, tag: "1.0.0", pullPolicy: IfNotPresent }
+
+wordpress:
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+gateway:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }

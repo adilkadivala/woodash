@@ -1,0 +1,121 @@
+# Shared defaults. Local vs production: values-local.yaml / values-prod.yaml.
+# Secrets: pass via -f secrets.local.yaml (see secrets.example.yaml). Do not commit real secrets.
+
+fullnameOverride: platform
+
+ingress:
+  enabled: true
+  className: nginx
+  tls: false
+  clusterIssuer: ""
+  storeHost: store.localtest.me
+  appHost: app.localtest.me
+
+storageClass: ""
+
+images:
+  gateway:
+    repository: mcp-gateway
+    tag: local
+    pullPolicy: IfNotPresent
+  dashboard:
+    repository: mcp-dashboard
+    tag: local
+    pullPolicy: IfNotPresent
+  wooMcp:
+    repository: mcp-woo
+    tag: local
+    pullPolicy: IfNotPresent
+  utilsMcp:
+    repository: mcp-utils
+    tag: local
+    pullPolicy: IfNotPresent
+  notesMcp:
+    repository: mcp-notes
+    tag: local
+    pullPolicy: IfNotPresent
+  wordpress: wordpress:6.7.2-php8.2-apache
+  wordpressCli: wordpress:cli-2.11
+  mariadb: mariadb:11.4
+  postgres: postgres:16-alpine
+
+wordpress:
+  port: 80
+  title: Demo Store
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+mariadb:
+  port: 3306
+  database: wordpress
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+postgres:
+  port: 5432
+  database: gateway
+  user: gateway
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+gateway:
+  port: 4000
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+dashboard:
+  port: 3000
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+wooMcp:
+  port: 4001
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+utilsMcp:
+  port: 4002
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+notesMcp:
+  port: 4003
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+networkPolicy:
+  enabled: true
+  # Ingress controller namespace/pod selector (ingress-nginx on Kind)
+  ingressNamespace: ingress-nginx
+  ingressPodLabels:
+    app.kubernetes.io/name: ingress-nginx
+
+llm:
+  model: openai/gpt-4o-mini
+  baseUrl: https://openrouter.ai/api/v1
+
+# Filled by secrets file (see secrets.example.yaml)
+secrets:
+  mariadbRootPassword: ""
+  mariadbPassword: ""
+  postgresPassword: ""
+  wordpressAdminUser: admin
+  wordpressAdminPassword: ""
+  wordpressAdminEmail: admin@store.local
+  wooConsumerKey: ""
+  wooConsumerSecret: ""
+  wooMcpToken: ""
+  notesMcpToken: ""
+  sessionSecret: ""
+  credentialEncKey: ""
+  bootstrapAdminEmail: admin@gateway.local
+  bootstrapAdminPassword: ""
+  llmApiKey: ""

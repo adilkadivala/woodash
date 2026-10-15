@@ -15,16 +15,83 @@ services:
       timeout: 5s
       retries: 10
 
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_ROOT_PASSWORD: wordpress-root
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  wordpress:
+    image: wordpress:6.7.2-php8.2-apache
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'http://localhost:8080');
+        define('WP_SITEURL', 'http://localhost:8080');
+    volumes:
+      - wp_data:/var/www/html
+
+  wp-init:
+    image: wordpress:cli-2.11
+    depends_on:
+      wordpress:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
+    user: "33:33"
+    volumes:
+      - wp_data:/var/www/html
+      - ./wordpress/init-store.sh:/scripts/init-store.sh:ro
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      WP_URL: http://localhost:8080
+      WP_TITLE: Demo Store
+      WP_ADMIN_USER: admin
+      WP_ADMIN_PASSWORD: ${WP_ADMIN_PASSWORD:-admin12345678}
+      WP_ADMIN_EMAIL: admin@store.local
+      WOO_CONSUMER_KEY: ${WOO_CONSUMER_KEY:-ck_0123456789abcdef0123456789abcdef01234567}
+      WOO_CONSUMER_SECRET: ${WOO_CONSUMER_SECRET:-cs_0123456789abcdef0123456789abcdef01234567}
+    entrypoint: ["sh", "/scripts/init-store.sh"]
+    restart: on-failure
+
   woo-mcp:
     build:
       context: .
       dockerfile: woo-mcp/Dockerfile
+    depends_on:
+      wp-init:
+        condition: service_completed_successfully
     environment:
-      PORT: 4011
+      PORT: 4001
       MCP_BEARER_TOKEN: woo-mcp-bearer-token
-      WOO_USE_MOCK: "true"
+      WOO_USE_MOCK: "false"
+      WOO_STORE_URL: http://wordpress
+      WOO_STORE_HOST: localhost:8080
+      WOO_STORE_PROTO: http
+      WOO_CONSUMER_KEY: ${WOO_CONSUMER_KEY:-ck_0123456789abcdef0123456789abcdef01234567}
+      WOO_CONSUMER_SECRET: ${WOO_CONSUMER_SECRET:-cs_0123456789abcdef0123456789abcdef01234567}
     ports:
-      - "4011:4011"
+      - "4001:4001"
 
   utils-mcp:
     build:
@@ -64,7 +131,7 @@ services:
       SESSION_SECRET: dev-session-secret-change-in-production-please!!
       CREDENTIAL_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       CORS_ORIGIN: http://localhost:3000
-      WOO_MCP_URL: http://woo-mcp:4011/mcp
+      WOO_MCP_URL: http://woo-mcp:4001/mcp
       WOO_MCP_TOKEN: woo-mcp-bearer-token
       UTILS_MCP_URL: http://utils-mcp:4002/mcp
       NOTES_MCP_URL: http://notes-mcp:4003/mcp
@@ -82,8 +149,11 @@ services:
       - gateway
     environment:
       SERVER_GATEWAY_URL: http://gateway:4000
+      NEXT_PUBLIC_USE_MOCK_API: "false"
     ports:
       - "3000:3000"
 
 volumes:
   pgdata:
+  mariadb_data:
+  wp_data:

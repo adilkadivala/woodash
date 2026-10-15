@@ -22,6 +22,25 @@ export interface LlmResponse {
   finish_reason: string;
 }
 
+function isOpenRouter(): boolean {
+  const key = config.LLM_API_KEY;
+  const base = config.LLM_BASE_URL;
+  return key.startsWith('sk-or-') || base.includes('openrouter.ai');
+}
+
+function resolveBaseUrl(): string {
+  if (isOpenRouter()) return 'https://openrouter.ai/api/v1';
+  return (config.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+}
+
+function resolveModel(): string {
+  const model = config.LLM_MODEL || 'openai/gpt-4o-mini';
+  if (isOpenRouter() && !model.includes('/')) {
+    return `openai/${model}`;
+  }
+  return model;
+}
+
 export async function chatCompletion(
   messages: LlmMessage[],
   tools?: LlmTool[],
@@ -30,8 +49,8 @@ export async function chatCompletion(
     throw new Error('LLM_API_KEY is not configured');
   }
 
-  const payload: any = {
-    model: config.LLM_MODEL || 'gpt-4o',
+  const payload: Record<string, unknown> = {
+    model: resolveModel(),
     messages,
   };
 
@@ -39,12 +58,19 @@ export async function chatCompletion(
     payload.tools = tools;
   }
 
-  const response = await fetch(`${config.LLM_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.LLM_API_KEY}`,
+  };
+
+  if (isOpenRouter()) {
+    headers['HTTP-Referer'] = config.CORS_ORIGIN || 'http://localhost:3000';
+    headers['X-Title'] = 'MCP Gateway';
+  }
+
+  const response = await fetch(`${resolveBaseUrl()}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.LLM_API_KEY}`,
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 

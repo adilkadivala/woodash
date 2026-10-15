@@ -94,6 +94,22 @@ const app = createMcpHttpApp({
   createServer: buildMcpServer,
 });
 
+app.get('/readyz', async (_req, res) => {
+  if (process.env.WOO_USE_MOCK !== 'false') {
+    res.json({ status: 'ready', mode: 'mock' });
+    return;
+  }
+  try {
+    await woo.listProducts(1);
+    res.json({ status: 'ready', mode: 'rest' });
+  } catch (err) {
+    res.status(503).json({
+      status: 'not ready',
+      error: err instanceof Error ? err.message : 'WooCommerce REST unreachable',
+    });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`[woo-mcp] listening on http://0.0.0.0:${port}/mcp (mock=${process.env.WOO_USE_MOCK !== 'false'})`);
 });

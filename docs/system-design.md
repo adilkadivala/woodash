@@ -6,7 +6,7 @@
 |-----------|------|
 | **Gateway (`server/`)** | REST dashboard API, session + API-key auth, MCP aggregation, chat agent, audit |
 | **Dashboard (`client/`)** | Next.js UI; proxies `/api/*` to gateway |
-| **woo-mcp** | Streamable HTTP MCP → WooCommerce REST (or mock store locally) |
+| **woo-mcp** | Streamable HTTP MCP → WooCommerce REST (`WOO_USE_MOCK=false` in cluster/compose) |
 | **utils-mcp / notes-mcp** | Extra upstreams for multi-server demos |
 | **PostgreSQL** | Users, keys (hashed), upstream registry, encrypted credentials, audit, chat history |
 
@@ -23,13 +23,16 @@
 
 ## Production vs local
 
-| Concern | Local | Production (K8s) |
-|---------|-------|------------------|
-| Upstream URLs | `127.0.0.1` / Docker service names | Cluster DNS (`*.svc.cluster.local`) |
-| Secrets | `.env` / compose | Kubernetes Secrets |
-| Ingress | localhost + Next rewrites | Single host: `/` dashboard, `/api` + `/mcp` gateway |
-| Woo store | Mock or dev store URL | In-cluster WordPress + Woo + REST keys |
-| SSRF | `SSRF_ALLOW_LOCALHOST=true` in dev | Strict URL validation for admin-added servers |
+Same Helm chart: `charts/platform` with `values-local.yaml` vs `values-prod.yaml`.
+
+| Concern | Local (Kind) | Production (k3s) |
+|---------|--------------|------------------|
+| Domains | `store.localtest.me` / `app.localtest.me` → 127.0.0.1 | Real DNS A records |
+| Ingress | ingress-nginx, no TLS | nginx + cert-manager TLS |
+| Storage | Kind `standard` | k3s `local-path` (or cloud class) |
+| Secrets | `secrets.local.yaml` → K8s Secrets | `secrets.prod.yaml` / sealed secrets |
+| Woo MCP | ClusterIP; REST to `http://wordpress` + `Host: store…` | same pattern, https public host |
+| Images | `kind load` `*:local` | registry + tag in values-prod |
 
 ## Prisma
 

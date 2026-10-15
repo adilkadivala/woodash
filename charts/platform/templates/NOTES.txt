@@ -1,0 +1,14 @@
+MCP Gateway platform ({{ .Release.Name }}) in namespace {{ .Release.Namespace }}.
+
+Storefront:  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.storeHost }}
+Dashboard:   http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.appHost }}
+MCP:         http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.appHost }}/mcp
+
+WooCommerce MCP is ClusterIP-only (woo-mcp:{{ .Values.wooMcp.port }}). Only the gateway can reach it.
+
+Local Kind: add to /etc/hosts if localtest.me does not resolve:
+  127.0.0.1 {{ .Values.ingress.storeHost }} {{ .Values.ingress.appHost }}
+
+Wait for wp-init Job, then log in to the dashboard (bootstrap admin from your secrets file).
+Upgrade:  helm upgrade {{ .Release.Name }} ./charts/platform -n {{ .Release.Namespace }} -f ... 
+Rollback: helm rollback {{ .Release.Name }} -n {{ .Release.Namespace }}

@@ -10,6 +10,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN chmod +x /app/entrypoint.sh
 EXPOSE 4000
 USER bun
-CMD ["bun", "run", "src/index.ts"]
+CMD ["/app/entrypoint.sh"]

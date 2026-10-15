@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+    app: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: "{{ .Values.images.dashboard.repository }}:{{ .Values.images.dashboard.tag }}"
+          imagePullPolicy: {{ .Values.images.dashboard.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.dashboard.port }}
+              name: http
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: PORT
+              value: {{ .Values.dashboard.port | quote }}
+            - name: SERVER_GATEWAY_URL
+              value: "http://gateway:{{ .Values.gateway.port }}"
+            - name: NEXT_PUBLIC_USE_MOCK_API
+              value: "false"
+          {{- include "platform.resources" .Values.dashboard.resources | nindent 10 }}
+          livenessProbe:
+            httpGet: { path: /login, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /login, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+    app: dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app: dashboard
+  ports:
+    - port: {{ .Values.dashboard.port }}
+      targetPort: http
+      name: http

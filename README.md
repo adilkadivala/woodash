@@ -1,140 +1,160 @@
 # WooCommerce MCP Gateway (Urumi Round 1)
 
-Team MCP gateway with a React dashboard, Prisma/PostgreSQL backend, and three upstream MCP servers (WooCommerce, utils, notes). External clients and the in-dashboard chat agent call tools through a single `/mcp` endpoint.
+Team MCP gateway: React dashboard, Prisma/PostgreSQL backend, custom WooCommerce MCP server (REST, not WP-CLI for tool calls), plus utils and notes MCP servers. Chat and external clients use one `/mcp` endpoint.
 
-## Architecture (local)
+## Architecture
 
 ```
-Dashboard (Next.js :3000)  ──rewrite──►  Gateway (:4000)
-                                              │
-                    ┌─────────────────────────┼─────────────────────────┐
-                    ▼                         ▼                         ▼
-              woo-mcp (:4011)           utils-mcp (:4002)         notes-mcp (:4003)
-                    │
-            WooCommerce REST (or mock store for dev)
+ MCP client (Bearer kgw_…)          Browser  app.<host>
+        |                                  |
+        +-------- Ingress -----------------+
+                  | /mcp /api              | /
+                  v                        v
+              Gateway  <---------------- Dashboard
+                  |
+     executeTool (policy, timeout, breaker, audit)
+                  |
+     +------------+------------+
+     v            v            v
+  woo-mcp     utils-mcp    notes-mcp     (ClusterIP only)
+     |
+  Woo REST  ←  WordPress + WooCommerce + MariaDB (PVCs)
 ```
 
-Deep dives: [backend-architecture.md](./backend-architecture.md), [frontend-architecture.md](./frontend-architecture.md), [docs/system-design.md](./docs/system-design.md), [docs/threat-model.md](./docs/threat-model.md).
+Design notes: [docs/system-design.md](./docs/system-design.md), [docs/threat-model.md](./docs/threat-model.md).
+
+**Tool names:** always `slug__tool` (e.g. `woo__list_orders`). Slugs cannot contain `__`.
+
+**Woo MCP → store:** WooCommerce REST API (`/wp-json/wc/v3`) with consumer key/secret from a Kubernetes Secret. REST is versioned and does not need exec into the WordPress pod (unlike WP-CLI). WP-CLI is used only in a one-shot **init Job** to install Woo, enable COD, and insert the REST key.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.2+
-- Docker (PostgreSQL)
-- Optional: `LLM_API_KEY` for the chat agent (OpenAI-compatible API)
+- Docker, [Bun](https://bun.sh) 1.2+, Node 22 (dashboard)
+- Optional: `LLM_API_KEY` for chat
+- For Kubernetes: Kind (or k3s), Helm 3, kubectl
 
-## Quick start (local)
+## Quick start (Docker Compose — real store)
 
-### 1. Database
-
-```bash
-docker compose up -d postgres
-```
-
-### 2. Gateway
+This runs MariaDB, WordPress/Woo (COD), wp-init, three MCP servers, gateway, dashboard.
 
 ```bash
-cd ~/projects/woocommerce/server
-cp -n .env.example .env   # edit DATABASE_URL / secrets if needed
-bun install
-bunx prisma db push
-bun run dev
-```
-
-Bootstrap admin (first boot):
-
-- Email: `admin@gateway.local`
-- Password: `admin12345678`
-
-### 3. Upstream MCP servers
-
-Use **one terminal per service** (each command blocks). Run from the repo root, e.g. `cd ~/projects/woocommerce` first — do not chain `cd woo-mcp && … && cd utils-mcp` in a single shell after woo-mcp starts.
-
-```bash
-# Terminal A
-cd ~/projects/woocommerce/woo-mcp && bun install && bun run src/index.ts    # :4011/mcp
-
-# Terminal B
-cd ~/projects/woocommerce/utils-mcp && bun install && bun run src/index.ts  # :4002
-
-# Terminal C
-cd ~/projects/woocommerce/notes-mcp && bun install && bun run src/index.ts    # :4003
-```
-
-> **Note:** Default Woo MCP port is **4011** to avoid clashing with other services on 4001.
-
-After changing upstream URLs, use **Servers → Refresh** in the dashboard or `POST /api/servers/:id/refresh`.
-
-### 4. Dashboard
-
-```bash
-cd ~/projects/woocommerce/client
-cp -n .env.example .env
-npm install
-npm run dev
-```
-
-The dashboard proxies `/api/*` to the gateway via Next.js route handlers (`SERVER_GATEWAY_URL`, default `http://127.0.0.1:4000`). Set `NEXT_PUBLIC_USE_MOCK_API=true` only if you want offline demo data without the server.
-
-Open [http://localhost:3000](http://localhost:3000), log in, and use Servers, Tools, Keys, Chat, and Audit.
-
-### All-in-one Docker (optional)
-
-```bash
-export LLM_API_KEY=sk-...   # optional
 docker compose up --build
 ```
 
-Dashboard: [http://localhost:3000](http://localhost:3000) · Gateway API: [http://localhost:4000](http://localhost:4000)
+- Storefront: http://localhost:8080 (WP admin `admin` / `admin12345678`)
+- Dashboard: http://localhost:3000 (`admin@gateway.local` / `admin12345678`)
+- Gateway MCP: http://localhost:4000/mcp
 
-## Connect an external MCP client
+Checkout with **Cash on delivery**. Orders show in WP Admin → WooCommerce → Orders and via `woo__list_orders`.
 
-1. Create an API key in **API keys** (shown once).
-2. Point your client at `https://<your-host>/mcp` with header `Authorization: Bearer kgw_...`.
-
-Example:
+## Dev loop (gateway + dashboard only)
 
 ```bash
-curl -s http://localhost:4000/mcp \
+docker compose up -d postgres mariadb wordpress wp-init woo-mcp utils-mcp notes-mcp
+cd server && cp -n .env.example .env && bun install && bunx prisma db push && bun run dev
+cd client && cp -n .env.example .env && npm install && npm run dev
+```
+
+Set `WOO_MCP_URL=http://127.0.0.1:4001/mcp` in `server/.env`. If port 4001 is taken, set `PORT` on woo-mcp and match the URL.
+
+## Kubernetes (Kind) — same chart as production
+
+Local domains use **[localtest.me](https://readme.localtest.me/)** which resolves to `127.0.0.1` (no `/etc/hosts` on most machines). Kind maps container :80/:443 to the host.
+
+```bash
+chmod +x scripts/*.sh
+./scripts/kind-up.sh
+```
+
+That will:
+
+1. `kind create cluster --config clusters.yml` (ingress-ready control-plane + workers)
+2. Install ingress-nginx
+3. Build and `kind load` gateway, dashboard, and MCP images
+4. `helm upgrade --install platform ./charts/platform -n platform -f values-local.yaml -f secrets.local.yaml`
+
+URLs:
+
+| What | URL |
+|------|-----|
+| Storefront | http://store.localtest.me |
+| Dashboard | http://app.localtest.me |
+| MCP | http://app.localtest.me/mcp |
+| API | http://app.localtest.me/api |
+
+Wait until `kubectl -n platform get jobs` shows `wp-init` complete and `woo-mcp` Ready (`/readyz` hits Woo REST).
+
+Passwords: `charts/platform/secrets.local.yaml` (gitignored; generated on first run).
+
+### Helm values (local vs VPS)
+
+| | `values-local.yaml` | `values-prod.yaml` |
+|--|---------------------|-------------------|
+| Ingress hosts | `*.localtest.me` | your DNS names |
+| TLS | off | cert-manager `clusterIssuer` |
+| storageClass | `standard` (Kind) | `local-path` (k3s) |
+| Images | `*:local` loaded into Kind | registry you push |
+
+Secrets never live in `values-*.yaml`. Use `-f secrets.local.yaml` or `-f secrets.prod.yaml` (`scripts/gen-secrets.sh`).
+
+### VPS / k3s
+
+```bash
+# point DNS A records at the VPS; install k3s + ingress-nginx + cert-manager
+./scripts/build-images.sh
+# tag/push images to your registry; set images.* in values-prod.yaml
+
+helm upgrade --install platform ./charts/platform -n platform --create-namespace \
+  -f charts/platform/values-prod.yaml \
+  -f secrets.prod.yaml
+```
+
+### Upgrade and rollback
+
+```bash
+helm upgrade platform ./charts/platform -n platform -f charts/platform/values-local.yaml -f charts/platform/secrets.local.yaml
+helm history platform -n platform
+helm rollback platform -n platform   # previous revision
+```
+
+WordPress and MariaDB use PVCs; rollback restores Deployment images/config, not DB contents. Take a snapshot before store upgrades.
+
+## Connect an external MCP client (user B)
+
+1. Dashboard → API keys → create key (shown once).
+2. Gateway URL: `http://app.localtest.me/mcp` (or `http://localhost:4000/mcp` on compose).
+3. Header: `Authorization: Bearer kgw_...`
+
+```bash
+curl -s http://app.localtest.me/mcp \
   -H 'Authorization: Bearer kgw_YOUR_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-Tool names are namespaced: `woo__list_orders`, `utils__current_time`, `notes__save_note`.
+Revoke the key in the UI; the next call is 401.
 
 ## Chat agent
 
-Set `LLM_API_KEY` (and optionally `LLM_MODEL`, `LLM_BASE_URL`) in `server/.env`. Chat streams SSE from `POST /api/chat/conversations/:id/messages` and executes tools as the logged-in user (audit `via=chat`).
-
-## WooCommerce MCP
-
-- **Production / K8s:** set `WOO_STORE_URL`, `WOO_CONSUMER_KEY`, `WOO_CONSUMER_SECRET`, `WOO_USE_MOCK=false`.
-- **Local demo:** `WOO_USE_MOCK=true` (default) uses an in-memory catalog and orders.
-
-Tools: `list_products`, `create_product`, `list_orders`, `get_order`, `update_order_status`.
-
-## Kubernetes / Helm
-
-Helm charts and Kind cluster config are the next step for the full assignment deliverable. Use `clusters.yml` for a sample Kind cluster and extend with charts under `charts/` (store, gateway, dashboard, MCP servers). Production differences (ingress host, storage class, secrets) belong in `values-prod.yaml` vs `values-local.yaml`.
-
-## Scripts
-
-| Path | Command | Purpose |
-|------|---------|---------|
-| `server/` | `bun run dev` | Gateway API + `/mcp` |
-| `client/` | `npm run dev` | Dashboard |
-| `woo-mcp/` | `bun run src/index.ts` | Woo upstream |
-| `utils-mcp/` | `bun run src/index.ts` | Time/math upstream |
-| `notes-mcp/` | `bun run src/index.ts` | Notes upstream |
+Chat uses **OpenRouter** (`https://openrouter.ai/api/v1`, model `openai/gpt-4o-mini`). Put an `sk-or-v1-…` key in `server/.env` as `LLM_API_KEY`, or `llmApiKey` in the Helm secrets file / `LLM_API_KEY` for compose. The agent calls `executeTool` as the logged-in user (`via=chat` in audit).
 
 ## Demo checklist
 
-- [ ] Admin: servers show **connected**, tools aggregated
-- [ ] Chat: create product + list orders (with LLM key)
-- [ ] Member: API key → MCP client `tools/list` / `tools/call`
-- [ ] Revoke key → 401 on `/mcp`
-- [ ] Disable upstream → tools disappear
-- [ ] Audit log shows calls with user attribution
+- [ ] Storefront: add product, COD checkout; order in Woo admin
+- [ ] User A chat: create product → appears on storefront; list today’s orders
+- [ ] User B MCP client: tools/list + orders; prompt using two servers (e.g. orders + `utils__current_time`)
+- [ ] Revoke B’s key → 401
+- [ ] Disable an upstream → tools gone from chat and MCP
+- [ ] Delete woo-mcp pod → dashboard **unreachable**; utils/notes still work
+- [ ] Audit shows each call with the right user
+
+## Scripts
+
+| Path | Purpose |
+|------|---------|
+| `scripts/kind-up.sh` | Kind + ingress + images + helm |
+| `scripts/build-images.sh` | Docker images for Helm |
+| `scripts/gen-secrets.sh` | Random secrets YAML |
 
 ## License
 

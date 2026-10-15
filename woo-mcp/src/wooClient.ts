@@ -22,17 +22,37 @@ function authQuery(): string {
   return `consumer_key=${encodeURIComponent(key)}&consumer_secret=${encodeURIComponent(secret)}`;
 }
 
+function storeHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // Public site URL may differ from the in-cluster service URL. Send the
+  // public Host so WordPress REST matches WP_HOME / WP_SITEURL.
+  if (process.env.WOO_STORE_HOST) {
+    headers.Host = process.env.WOO_STORE_HOST;
+    headers['X-Forwarded-Host'] = process.env.WOO_STORE_HOST;
+    headers['X-Forwarded-Proto'] = process.env.WOO_STORE_PROTO || 'http';
+  }
+  return headers;
+}
+
 async function wooFetch(path: string, init?: RequestInit): Promise<unknown> {
   const url = `${wooBase()}${path}${path.includes('?') ? '&' : '?'}${authQuery()}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WooCommerce API ${res.status}: ${text.slice(0, 300)}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: { ...storeHeaders(), ...init?.headers },
+      redirect: 'follow',
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`WooCommerce API ${res.status}: ${text.slice(0, 300)}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 export async function listProducts(limit = 20): Promise<unknown> {
@@ -123,4 +143,4 @@ function projectOrder(raw: unknown) {
   };
 }
 
-seedDemoOrder();
+if (useMock) seedDemoOrder();
