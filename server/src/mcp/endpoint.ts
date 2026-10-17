@@ -17,6 +17,8 @@ export function createMcpRouter(manager: UpstreamManager): Router {
   const router = Router();
 
   // Only POST is allowed for Streamable HTTP
+  const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'];
+
   router.get('/', (_req: Request, res: Response) => {
     res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST for MCP requests' } });
   });
@@ -82,6 +84,12 @@ export function createMcpRouter(manager: UpstreamManager): Router {
       return;
     }
 
+    // JSON-RPC notifications (no id) and responses get 202 with no body, per Streamable HTTP.
+    if (method.startsWith('notifications/') || !('id' in body)) {
+      res.status(202).end();
+      return;
+    }
+
     // --- Route by method ---
     try {
       switch (method) {
@@ -90,7 +98,9 @@ export function createMcpRouter(manager: UpstreamManager): Router {
             jsonrpc: '2.0',
             id,
             result: {
-              protocolVersion: '2025-03-26',
+              protocolVersion: SUPPORTED_PROTOCOL_VERSIONS.includes(String(params?.protocolVersion))
+                ? String(params?.protocolVersion)
+                : SUPPORTED_PROTOCOL_VERSIONS[0],
               capabilities: { tools: {} },
               serverInfo: {
                 name: 'mcp-gateway',
@@ -102,12 +112,6 @@ export function createMcpRouter(manager: UpstreamManager): Router {
         }
 
         case 'ping': {
-          res.json({ jsonrpc: '2.0', id, result: {} });
-          break;
-        }
-
-        case 'notifications/initialized': {
-          // Client notification after initialize — acknowledge silently
           res.json({ jsonrpc: '2.0', id, result: {} });
           break;
         }

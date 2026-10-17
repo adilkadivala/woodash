@@ -112,7 +112,8 @@ export async function executeTool(
       };
     }
 
-    // 4. Call upstream with timeout
+    // 4. Call upstream with timeout (reconnect lazily if the health loop dropped the session)
+    if (!client.isConnected()) await client.connect();
     const result = await callWithTimeout(client, toolName, args, 15_000);
 
     // Record breaker success
@@ -132,7 +133,7 @@ export async function executeTool(
     return result;
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    const isTimeout = error instanceof Error && error.message.includes('timeout');
+    const isTimeout = error instanceof Error && /time(d)? ?out/i.test(error.message);
     const outcome = isTimeout ? 'timeout' : 'error';
     const errorCode = isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR';
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -167,7 +168,7 @@ export async function executeTool(
  * Call an upstream tool with a timeout.
  */
 async function callWithTimeout(
-  client: { callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> },
+  client: { callTool(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<ToolResult> },
   toolName: string,
   args: Record<string, unknown>,
   timeoutMs: number,
@@ -178,7 +179,7 @@ async function callWithTimeout(
     }, timeoutMs);
 
     client
-      .callTool(toolName, args)
+      .callTool(toolName, args, timeoutMs)
       .then((result) => {
         clearTimeout(timer);
         resolve(result);

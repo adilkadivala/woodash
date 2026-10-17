@@ -136,7 +136,7 @@ async function registerMcp(
         authType: 'bearer',
         credentialEnc,
         enabled: true,
-        status: 'unknown',
+        status: 'unreachable',
         lastError: null,
       },
     });

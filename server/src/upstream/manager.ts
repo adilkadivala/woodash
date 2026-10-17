@@ -2,6 +2,7 @@ import { UpstreamClient } from './client.js';
 import { CircuitBreaker } from './breaker.js';
 import { prisma } from '../db/client.js';
 import { decryptCredential } from '../security/crypto.js';
+import { checkServerHealth } from './health.js';
 
 /**
  * Manages all upstream MCP server clients and their circuit breakers.
@@ -19,7 +20,8 @@ export class UpstreamManager {
       where: { enabled: true },
     });
 
-    for (const server of servers) {
+    // Connect in parallel so one slow upstream doesn't delay boot for the rest.
+    await Promise.allSettled(servers.map(async (server) => {
       let credential: string | undefined;
       if (server.credentialEnc) {
         try {
@@ -36,7 +38,7 @@ export class UpstreamManager {
         server.authHeaderName ?? undefined,
         credential,
       );
-    }
+    }));
   }
 
   /**
@@ -64,6 +66,8 @@ export class UpstreamManager {
     } catch (error) {
       console.error(`[upstream] Failed to connect to ${slug}:`, error);
     }
+    // Persist real status now instead of waiting for the next health tick.
+    await checkServerHealth(this, slug);
   }
 
   /**

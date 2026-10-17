@@ -228,9 +228,17 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # 443: LLM provider. apiServerPort: kube-apiserver (store provisioner runs helm/kubectl);
+    # the kubernetes Service DNATs 443 to the endpoint port before policy is evaluated.
     - ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.apiServerPort | default 6443 }}
+        {{- if ne (int .Values.llm.egressPort) 443 }}
+        - protocol: TCP
+          port: {{ .Values.llm.egressPort }}
+        {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

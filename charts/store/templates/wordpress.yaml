@@ -133,6 +133,9 @@ spec:
       restartPolicy: OnFailure
       securityContext:
         fsGroup: 33
+        # wordpress:cli is Alpine (www-data=82); match the wordpress image's www-data (33)
+        runAsUser: 33
+        runAsGroup: 33
       containers:
         - name: wp-cli
           image: {{ .Values.images.wordpressCli }}

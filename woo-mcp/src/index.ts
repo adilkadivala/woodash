@@ -44,14 +44,24 @@ function buildMcpServer(): McpServer {
   server.registerTool(
     'list_orders',
     {
-      description: 'List recent orders (optionally filter by status).',
+      description:
+        'List recent orders, newest first. Filter by status and/or creation date range. ' +
+        'For "orders today" pass after = today\'s date (YYYY-MM-DD).',
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional(),
         status: z.enum(ORDER_STATUSES).optional(),
+        after: z
+          .string()
+          .optional()
+          .describe('Only orders created on/after this ISO 8601 date or datetime, e.g. 2026-10-17'),
+        before: z
+          .string()
+          .optional()
+          .describe('Only orders created before this ISO 8601 date or datetime'),
       },
     },
-    async ({ limit, status }) => {
-      const orders = await woo.listOrders(limit ?? 20, status);
+    async ({ limit, status, after, before }) => {
+      const orders = await woo.listOrders(limit ?? 20, status, { after, before });
       return { content: [{ type: 'text', text: JSON.stringify({ orders }, null, 2) }] };
     },
   );

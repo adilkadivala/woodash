@@ -13,7 +13,4 @@ nodes:
     extraPortMappings:
       - { containerPort: 80,  hostPort: 80,  protocol: TCP }
       - { containerPort: 443, hostPort: 443, protocol: TCP }
-  - role: worker
-    image: kindest/node:v1.31.2
-  - role: worker
-    image: kindest/node:v1.31.2
+# Single node keeps local RAM low; add workers here if needed.

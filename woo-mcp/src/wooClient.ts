@@ -89,15 +89,31 @@ export async function createProduct(input: {
   return projectProduct(data);
 }
 
-export async function listOrders(limit = 20, status?: string): Promise<unknown> {
+export type DateRange = { after?: string; before?: string };
+
+/** Accepts YYYY-MM-DD or a full ISO datetime; WooCommerce wants a datetime. */
+function toIsoDateTime(value: string, label: string): string {
+  const v = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  if (Number.isNaN(Date.parse(v))) throw new Error(`Invalid ${label} date: ${value}`);
+  return v;
+}
+
+export async function listOrders(limit = 20, status?: string, range: DateRange = {}): Promise<unknown> {
+  const after = range.after ? toIsoDateTime(range.after, 'after') : undefined;
+  const before = range.before ? toIsoDateTime(range.before, 'before') : undefined;
   if (useMock) {
     seedDemoOrder();
-    let rows = mockListOrders(limit);
+    let rows = mockListOrders(100);
     if (status) rows = rows.filter((o) => o.status === status);
-    return rows;
+    if (after) rows = rows.filter((o) => Date.parse(o.date_created) >= Date.parse(after));
+    if (before) rows = rows.filter((o) => Date.parse(o.date_created) < Date.parse(before));
+    return rows.slice(0, limit);
   }
-  const q = status ? `&status=${encodeURIComponent(status)}` : '';
-  const data = await wooFetch(`/orders?per_page=${Math.min(limit, 100)}${q}`);
+  const params = new URLSearchParams({ per_page: String(Math.min(limit, 100)) });
+  if (status) params.set('status', status);
+  if (after) params.set('after', after);
+  if (before) params.set('before', before);
+  const data = await wooFetch(`/orders?${params}`);
   return (data as unknown[]).map(projectOrder);
 }
 
