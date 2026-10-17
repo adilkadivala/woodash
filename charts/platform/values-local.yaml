@@ -10,6 +10,9 @@ ingress:
 
 storageClass: standard
 
+storeProvisioning:
+  hostSuffix: localtest.me
+
 images:
   gateway: { repository: mcp-gateway, tag: local, pullPolicy: IfNotPresent }
   dashboard: { repository: mcp-dashboard, tag: local, pullPolicy: IfNotPresent }

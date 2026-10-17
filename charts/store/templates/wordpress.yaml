@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wordpress-data
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app: wordpress
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wp-init
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+data:
+  init-store.sh: |
+{{ .Files.Get "files/init-store.sh" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app: wordpress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        urumi.ai/store: {{ .Values.store.slug | quote }}
+    spec:
+      securityContext:
+        fsGroup: 33
+      containers:
+        - name: wordpress
+          image: {{ .Values.images.wordpress }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: mariadb
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_USER }
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_PASSWORD }
+            - name: WORDPRESS_DB_NAME
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_DATABASE }
+            - name: WORDPRESS_CONFIG_EXTRA
+              value: |
+                define('WP_HOME', 'http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.store.host }}');
+                define('WP_SITEURL', 'http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.store.host }}');
+                if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+                  $_SERVER['HTTPS'] = 'on';
+                }
+          volumeMounts:
+            - name: html
+              mountPath: /var/www/html
+          {{- include "store.resources" .Values.wordpress.resources | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: html
+          persistentVolumeClaim:
+            claimName: wordpress-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app: wordpress
+spec:
+  type: ClusterIP
+  selector:
+    app: wordpress
+  ports:
+    - port: {{ .Values.wordpress.port }}
+      targetPort: http
+      name: http
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wp-init
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app: wp-init
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 8
+  template:
+    metadata:
+      labels:
+        app: wp-init
+        urumi.ai/store: {{ .Values.store.slug | quote }}
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        fsGroup: 33
+      containers:
+        - name: wp-cli
+          image: {{ .Values.images.wordpressCli }}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/scripts/init-store.sh"]
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: mariadb
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_USER }
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_PASSWORD }
+            - name: WORDPRESS_DB_NAME
+              valueFrom:
+                secretKeyRef: { name: store-db, key: MYSQL_DATABASE }
+            - name: WP_URL
+              value: "http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.store.host }}"
+            - name: WP_TITLE
+              value: {{ .Values.store.name | quote }}
+            - name: WP_ADMIN_USER
+              valueFrom:
+                secretKeyRef: { name: store-rest, key: WP_ADMIN_USER }
+            - name: WP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: store-rest, key: WP_ADMIN_PASSWORD }
+            - name: WP_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef: { name: store-rest, key: WP_ADMIN_EMAIL }
+            - name: WOO_CONSUMER_KEY
+              valueFrom:
+                secretKeyRef: { name: store-rest, key: WOO_CONSUMER_KEY }
+            - name: WOO_CONSUMER_SECRET
+              valueFrom:
+                secretKeyRef: { name: store-rest, key: WOO_CONSUMER_SECRET }
+            - name: HOME
+              value: /tmp
+            - name: WP_CLI_CACHE_DIR
+              value: /tmp/.wp-cli/cache
+          volumeMounts:
+            - name: html
+              mountPath: /var/www/html
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: html
+          persistentVolumeClaim:
+            claimName: wordpress-data
+        - name: scripts
+          configMap:
+            name: wp-init
+            defaultMode: 0755

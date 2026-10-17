@@ -3,6 +3,11 @@
 # Used by Docker Compose and the Helm wp-init Job. Runs against /var/www/html.
 set -eu
 
+# wordpress:cli as uid 33 has HOME=/; WP-CLI then cannot mkdir /.wp-cli/cache.
+export HOME="${HOME:-/tmp}"
+export WP_CLI_CACHE_DIR="${WP_CLI_CACHE_DIR:-/tmp/.wp-cli/cache}"
+mkdir -p "$WP_CLI_CACHE_DIR"
+
 cd /var/www/html
 
 WP="wp --path=/var/www/html"
@@ -47,8 +52,15 @@ if ! $WP core is-installed >/dev/null 2>&1; then
     --skip-email
 fi
 
-$WP plugin is-installed woocommerce >/dev/null 2>&1 || $WP plugin install woocommerce --activate
-$WP plugin is-active woocommerce >/dev/null 2>&1 || $WP plugin activate woocommerce
+# Pin Woo: latest 11.x requires WordPress 7.0; this stack uses 6.7.2.
+WOO_PLUGIN_VERSION="${WOO_PLUGIN_VERSION:-9.9.5}"
+echo "[wp-init] ensuring WooCommerce ${WOO_PLUGIN_VERSION}..."
+if ! $WP plugin is-installed woocommerce >/dev/null 2>&1; then
+  $WP plugin install woocommerce --version="${WOO_PLUGIN_VERSION}" --activate
+fi
+if ! $WP plugin is-active woocommerce >/dev/null 2>&1; then
+  $WP plugin activate woocommerce
+fi
 
 # Create shop pages (cart, checkout, shop, my-account)
 $WP wc --user=1 tool run install_pages >/dev/null 2>&1 || true
@@ -64,6 +76,38 @@ $WP option update woocommerce_cod_settings --format=json \
 
 $WP rewrite structure "/%postname%/" --hard >/dev/null
 $WP rewrite flush --hard >/dev/null
+
+# WooCommerce only runs consumer-key Basic/query auth when is_ssl() is true.
+# MCP talks HTTP to WordPress (Compose port 80 and in-cluster ClusterIP).
+echo "[wp-init] installing mu-plugin for Woo REST auth over HTTP..."
+MU_DIR=/var/www/html/wp-content/mu-plugins
+mkdir -p "$MU_DIR"
+if [ ! -w "$MU_DIR" ]; then
+  echo "[wp-init] $MU_DIR is not writable; leaving existing mu-plugin in place"
+else
+cat > "$MU_DIR/wc-rest-http-auth.php" <<'PHP'
+<?php
+/**
+ * Plugin Name: Woo REST auth over HTTP
+ * Description: Allow Woo REST consumer-key auth when WordPress is served over HTTP.
+ */
+add_filter(
+	'determine_current_user',
+	static function ( $user_id ) {
+		if ( ! empty( $user_id ) ) {
+			return $user_id;
+		}
+		$uri = $_SERVER['REQUEST_URI'] ?? '';
+		if ( $uri === '' || ( false === strpos( $uri, '/wp-json/wc/' ) && false === strpos( $uri, '/wp-json/wc-' ) ) ) {
+			return $user_id;
+		}
+		$_SERVER['HTTPS'] = 'on';
+		return $user_id;
+	},
+	5
+);
+PHP
+fi
 
 echo "[wp-init] ensuring REST API key..."
 $WP eval '

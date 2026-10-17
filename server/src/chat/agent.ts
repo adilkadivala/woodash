@@ -1,11 +1,10 @@
 import type { Response } from 'express';
 import { prisma } from '../db/client.js';
-import { config } from '../config.js';
 import type { Principal } from '../auth/principal.js';
 import type { UpstreamManager } from '../upstream/manager.js';
 import { listAllTools } from '../aggregator/listTools.js';
 import { executeTool } from '../executor/executeTool.js';
-import { chatCompletion } from './llm.js';
+import { chatCompletion, isLlmConfigured } from './llm.js';
 import type { LlmMessage } from './llm.js';
 import { mcpToolsToLlmTools, parseFunctionArgs } from './toolBridge.js';
 import { sendEvent } from './stream.js';
@@ -18,8 +17,8 @@ export async function runChatAgent(
   res: Response,
 ): Promise<void> {
   try {
-    if (!config.LLM_API_KEY) {
-      sendEvent(res, 'error', { message: 'LLM API key is not configured' });
+    if (!isLlmConfigured()) {
+      sendEvent(res, 'error', { message: 'LLM is not configured. Set LLM_BASE_URL (Ollama) or LLM_API_KEY.' });
       sendEvent(res, 'done', {});
       return;
     }

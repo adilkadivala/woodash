@@ -13,6 +13,7 @@ import { createAuditRouter } from './routes/audit.js';
 import { createChatRouter } from './routes/chat.js';
 import { createHealthRouter } from './routes/health.js';
 import { createMcpRouter } from './mcp/endpoint.js';
+import { createStoresRouter } from './routes/stores.js';
 
 // Upstream
 import type { UpstreamManager } from './upstream/manager.js';
@@ -46,6 +47,7 @@ export function createApp(manager: UpstreamManager): express.Express {
   app.use('/api/tools', createToolsRouter(manager));
   app.use('/api/audit', createAuditRouter());
   app.use('/api/chat', createChatRouter(manager));
+  app.use('/api/stores', createStoresRouter());
 
   // ─── MCP endpoint (external clients) ───
   app.use('/mcp', createMcpRouter(manager));

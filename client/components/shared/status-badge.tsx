@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2Icon, AlertCircleIcon, XCircleIcon, ClockIcon, ShieldAlertIcon } from "lucide-react"
-import type { Outcome, ServerStatus } from "@/types/api"
+import type { Outcome, ServerStatus, StoreStatus } from "@/types/api"
 import { cn } from "@/lib/utils"
 
 export function ServerStatusBadge({
@@ -50,6 +50,69 @@ export function ServerStatusBadge({
     >
       <span className="size-1.5 rounded-full bg-muted-foreground/60" />
       Disabled
+    </Badge>
+  )
+}
+
+export function StoreStatusBadge({
+  status,
+  error,
+  className,
+}: {
+  status: StoreStatus
+  error?: string | null
+  className?: string
+}) {
+  if (status === "ready") {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          "gap-1.5 border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium",
+          className
+        )}
+      >
+        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        Ready
+      </Badge>
+    )
+  }
+  if (status === "provisioning") {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          "gap-1.5 border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium",
+          className
+        )}
+      >
+        <ClockIcon className="size-3" />
+        Provisioning
+      </Badge>
+    )
+  }
+  if (status === "deleting") {
+    return (
+      <Badge
+        variant="outline"
+        className={cn("gap-1.5 border-muted-foreground/20 bg-muted text-muted-foreground font-medium", className)}
+      >
+        <ClockIcon className="size-3" />
+        Deleting
+      </Badge>
+    )
+  }
+  return (
+    <Badge
+      variant="outline"
+      title={error || "Provisioning failed"}
+      className={cn(
+        "gap-1.5 border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium",
+        className
+      )}
+    >
+      <XCircleIcon className="size-3" />
+      Failed
     </Badge>
   )
 }

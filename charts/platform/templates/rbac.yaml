@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gateway
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gateway-store-provisioner
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets, configmaps, services, pods, pods/log, events, persistentvolumeclaims, serviceaccounts, resourcequotas, limitranges]
+    verbs: ["*"]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: ["*"]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: ["*"]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gateway-store-provisioner
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: gateway
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gateway-store-provisioner

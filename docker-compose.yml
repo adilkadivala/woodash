@@ -71,6 +71,9 @@ services:
       WP_ADMIN_EMAIL: admin@store.local
       WOO_CONSUMER_KEY: ${WOO_CONSUMER_KEY:-ck_0123456789abcdef0123456789abcdef01234567}
       WOO_CONSUMER_SECRET: ${WOO_CONSUMER_SECRET:-cs_0123456789abcdef0123456789abcdef01234567}
+      HOME: /tmp
+      WP_CLI_CACHE_DIR: /tmp/.wp-cli/cache
+      WOO_PLUGIN_VERSION: "9.9.5"
     entrypoint: ["sh", "/scripts/init-store.sh"]
     restart: on-failure
 
@@ -82,7 +85,7 @@ services:
       wp-init:
         condition: service_completed_successfully
     environment:
-      PORT: 4001
+      PORT: 4011
       MCP_BEARER_TOKEN: woo-mcp-bearer-token
       WOO_USE_MOCK: "false"
       WOO_STORE_URL: http://wordpress
@@ -91,7 +94,7 @@ services:
       WOO_CONSUMER_KEY: ${WOO_CONSUMER_KEY:-ck_0123456789abcdef0123456789abcdef01234567}
       WOO_CONSUMER_SECRET: ${WOO_CONSUMER_SECRET:-cs_0123456789abcdef0123456789abcdef01234567}
     ports:
-      - "4001:4001"
+      - "4011:4011"
 
   utils-mcp:
     build:
@@ -112,10 +115,17 @@ services:
     ports:
       - "4003:4003"
 
+  # Ollama on the host binds 127.0.0.1:11434; containers cannot reach that.
+  ollama-proxy:
+    image: alpine/socat
+    network_mode: host
+    command: TCP-LISTEN:11435,fork,reuseaddr TCP:127.0.0.1:11434
+    restart: unless-stopped
+
   gateway:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,19 +135,27 @@ services:
         condition: service_started
       notes-mcp:
         condition: service_started
+      ollama-proxy:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: ./server/.env
+        required: false
     environment:
       PORT: 4000
       DATABASE_URL: postgresql://gateway:gateway@postgres:5432/gateway
       SESSION_SECRET: dev-session-secret-change-in-production-please!!
       CREDENTIAL_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       CORS_ORIGIN: http://localhost:3000
-      WOO_MCP_URL: http://woo-mcp:4001/mcp
+      WOO_MCP_URL: http://woo-mcp:4011/mcp
       WOO_MCP_TOKEN: woo-mcp-bearer-token
       UTILS_MCP_URL: http://utils-mcp:4002/mcp
       NOTES_MCP_URL: http://notes-mcp:4003/mcp
       NOTES_MCP_TOKEN: notes-mcp-bearer-token
       SSRF_ALLOW_LOCALHOST: "false"
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: gpt-oss:120b-cloud
+      LLM_BASE_URL: http://host.docker.internal:11435/v1
     ports:
       - "4000:4000"
 

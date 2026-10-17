@@ -15,6 +15,7 @@ export function useMe() {
     queryKey: ["me"],
     queryFn: () => api<{ user: User }>("/auth/me"),
     staleTime: 60 * 1000,
+    retry: false,
   })
 
   const logoutMutation = useMutation({
@@ -25,7 +26,7 @@ export function useMe() {
     },
   })
 
-  const user = data?.user ?? (useMockApi ? MOCK_USER : undefined)
+  const user = data?.user ?? (useMockApi && !error ? MOCK_USER : undefined)
   const isAdmin = user?.role === "admin"
 
   return {

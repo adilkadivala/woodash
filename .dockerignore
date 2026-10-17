@@ -1,0 +1,10 @@
+**/node_modules
+**/.next
+.git
+client
+server/dist
+**/.env
+**/.env.*
+!**/.env.example
+charts/platform/secrets.local.yaml
+charts/platform/secrets.prod.yaml

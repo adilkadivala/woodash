@@ -15,15 +15,24 @@ function wooBase(): string {
   return `${base}/wp-json/wc/v3`;
 }
 
-function authQuery(): string {
+function consumerKey(): string {
   const key = process.env.WOO_CONSUMER_KEY;
+  if (!key) throw new Error('WOO_CONSUMER_KEY required');
+  return key;
+}
+
+function consumerSecret(): string {
   const secret = process.env.WOO_CONSUMER_SECRET;
-  if (!key || !secret) throw new Error('WOO_CONSUMER_KEY / WOO_CONSUMER_SECRET required');
-  return `consumer_key=${encodeURIComponent(key)}&consumer_secret=${encodeURIComponent(secret)}`;
+  if (!secret) throw new Error('WOO_CONSUMER_SECRET required');
+  return secret;
 }
 
 function storeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = Buffer.from(`${consumerKey()}:${consumerSecret()}`).toString('base64');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Basic ${token}`,
+  };
   // Public site URL may differ from the in-cluster service URL. Send the
   // public Host so WordPress REST matches WP_HOME / WP_SITEURL.
   if (process.env.WOO_STORE_HOST) {
@@ -35,7 +44,8 @@ function storeHeaders(): Record<string, string> {
 }
 
 async function wooFetch(path: string, init?: RequestInit): Promise<unknown> {
-  const url = `${wooBase()}${path}${path.includes('?') ? '&' : '?'}${authQuery()}`;
+  const qs = `consumer_key=${encodeURIComponent(consumerKey())}&consumer_secret=${encodeURIComponent(consumerSecret())}`;
+  const url = `${wooBase()}${path}${path.includes('?') ? '&' : '?'}${qs}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {

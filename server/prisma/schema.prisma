@@ -23,8 +23,31 @@ model User {
   invitationsSent Invitation[] @relation("InvitedBy")
   auditLogs     AuditLog[]
   conversations Conversation[]
+  stores        Store[]
 
   @@map("users")
+}
+
+model Store {
+  id            String    @id @default(uuid()) @db.Uuid
+  slug          String    @unique
+  name          String
+  namespace     String    @unique
+  host          String
+  status        String    @default("provisioning") // provisioning | ready | failed | deleting
+  lastError     String?   @map("last_error")
+  mcpSlug       String?   @unique @map("mcp_slug")
+  secretsEnc    Bytes?    @map("secrets_enc")
+  createdBy     String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  provisionedAt DateTime? @map("provisioned_at")
+
+  owner User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([createdBy, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("stores")
 }
 
 model Invitation {

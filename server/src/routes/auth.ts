@@ -3,9 +3,10 @@ import crypto from 'node:crypto';
 import { stringifySetCookie } from 'cookie';
 import { prisma } from '../db/client.js';
 import { config } from '../config.js';
+import { parseCookie } from 'cookie';
 import { hashPassword, verifyPassword } from '../auth/passwords.js';
 import { createSession, deleteSession } from '../auth/sessions.js';
-import { requireAuth, requireSession } from '../auth/middleware.js';
+import { requireAuth } from '../auth/middleware.js';
 
 const router = Router();
 
@@ -69,12 +70,10 @@ router.post('/login', async (req, res) => {
 /**
  * POST /logout - Clear session and cookie
  */
-router.post('/logout', requireSession, async (req, res) => {
-  // Delete session from DB (session ID is in the cookie)
-  const cookies = req.headers.cookie || '';
-  const sidMatch = cookies.match(/sid=([^;]+)/);
-  if (sidMatch) {
-    await deleteSession(sidMatch[1]);
+router.post('/logout', async (req, res) => {
+  const cookies = parseCookie(req.headers.cookie || '');
+  if (cookies.sid) {
+    await deleteSession(cookies.sid).catch(() => undefined);
   }
 
   // Clear cookie

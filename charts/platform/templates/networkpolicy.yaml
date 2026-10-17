@@ -212,6 +212,22 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.notesMcp.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              urumi.ai/kind: store
+      ports:
+        - protocol: TCP
+          port: {{ .Values.wooMcp.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
     - ports:
         - protocol: TCP
           port: 443

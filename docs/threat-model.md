@@ -20,6 +20,10 @@ One member cannot impersonate another: audit and rate limits bind to `userId` fr
 
 URL validation blocks private IPs and metadata hosts in production; cluster-internal hosts are allowed via `.svc` naming for legitimate in-cluster MCP services. Admins should only register servers they trust—compromised upstreams can return misleading tool output (prompt injection surface).
 
+## Store namespaces
+
+Each extra store is a namespace with default-deny NetworkPolicies: Woo MCP accepts only the gateway ServiceAccount’s pods in `platform`; MariaDB accepts only WordPress/wp-init in that namespace. Store secrets never leave Kubernetes Secrets plus AES-GCM in Postgres. The gateway’s ClusterRole is limited to the APIs Helm needs for store charts (not cluster-admin). Members can only delete stores they created (admins can delete any).
+
 ## Revocation
 
 Revoked API keys fail closed on next request. Disabled users and disabled upstreams are enforced in `executeTool` and listing.

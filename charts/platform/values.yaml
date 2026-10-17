@@ -74,7 +74,7 @@ dashboard:
     limits: { cpu: 500m, memory: 512Mi }
 
 wooMcp:
-  port: 4001
+  port: 4011
   resources:
     requests: { cpu: 25m, memory: 64Mi }
     limits: { cpu: 250m, memory: 256Mi }
@@ -101,6 +101,12 @@ networkPolicy:
 llm:
   model: openai/gpt-4o-mini
   baseUrl: https://openrouter.ai/api/v1
+
+storeProvisioning:
+  chartPath: /charts/store
+  hostSuffix: localtest.me
+  maxStoresPerUser: 3
+  timeoutSec: 600
 
 # Filled by secrets file (see secrets.example.yaml)
 secrets:

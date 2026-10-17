@@ -88,13 +88,13 @@ function buildMcpServer(): McpServer {
   return server;
 }
 
-const port = Number(process.env.PORT || 4001);
+const port = Number(process.env.PORT || 4011);
 const app = createMcpHttpApp({
   bearerToken: process.env.MCP_BEARER_TOKEN || 'woo-mcp-bearer-token',
   createServer: buildMcpServer,
 });
 
-app.get('/readyz', async (_req, res) => {
+app.get('/readyz', async (req, res) => {
   if (process.env.WOO_USE_MOCK !== 'false') {
     res.json({ status: 'ready', mode: 'mock' });
     return;

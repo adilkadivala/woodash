@@ -55,7 +55,7 @@ cd server && cp -n .env.example .env && bun install && bunx prisma db push && bu
 cd client && cp -n .env.example .env && npm install && npm run dev
 ```
 
-Set `WOO_MCP_URL=http://127.0.0.1:4001/mcp` in `server/.env`. If port 4001 is taken, set `PORT` on woo-mcp and match the URL.
+Set `WOO_MCP_URL=http://127.0.0.1:4011/mcp` in `server/.env`. If port 4011 is taken, set `PORT` on woo-mcp and match the URL.
 
 ## Kubernetes (Kind) — same chart as production
 
@@ -83,6 +83,18 @@ URLs:
 | API | http://app.localtest.me/api |
 
 Wait until `kubectl -n platform get jobs` shows `wp-init` complete and `woo-mcp` Ready (`/readyz` hits Woo REST).
+
+### Extra stores (dashboard → Stores)
+
+The platform chart’s demo shop stays at `store.localtest.me`. Additional shops are Helm releases of `charts/store` in namespace `store-{slug}`:
+
+1. Open **Stores** → **New store** (name `Acme`, slug `acme`).
+2. Wait until status is **Ready** (WordPress + Woo init + ClusterIP `woo-mcp`).
+3. Storefront: `http://acme.localtest.me`. Tools appear as `woo-acme__list_orders`, etc.
+4. Provision a second store the same way. Chat: compare today’s orders across both MCP slugs.
+5. Delete one store: Helm uninstall + namespace delete; its tools disappear.
+
+Guardrails: `MAX_STORES_PER_USER` (default 3), `STORE_PROVISION_TIMEOUT_SEC` (default 600), ResourceQuota/LimitRange, NetworkPolicies (store MCP only accepts the gateway; MariaDB only WordPress). Retry on **Failed** re-runs `helm upgrade --install` with the same encrypted secrets. Compose without Kubernetes records `PROVISIONING_REQUIRES_KUBERNETES`.
 
 Passwords: `charts/platform/secrets.local.yaml` (gitignored; generated on first run).
 
@@ -136,7 +148,7 @@ Revoke the key in the UI; the next call is 401.
 
 ## Chat agent
 
-Chat uses **OpenRouter** (`https://openrouter.ai/api/v1`, model `openai/gpt-4o-mini`). Put an `sk-or-v1-…` key in `server/.env` as `LLM_API_KEY`, or `llmApiKey` in the Helm secrets file / `LLM_API_KEY` for compose. The agent calls `executeTool` as the logged-in user (`via=chat` in audit).
+Chat uses **Ollama** (`http://127.0.0.1:11434/v1`, model `gpt-oss:120b-cloud`). Compose reaches it via `host.docker.internal:11435` (socat, because Ollama binds localhost). For OpenRouter instead, set `LLM_BASE_URL=https://openrouter.ai/api/v1`, `LLM_MODEL=openai/gpt-4o-mini`, and `LLM_API_KEY=sk-or-v1-…`. The agent calls `executeTool` as the logged-in user (`via=chat` in audit).
 
 ## Demo checklist
 
@@ -147,6 +159,7 @@ Chat uses **OpenRouter** (`https://openrouter.ai/api/v1`, model `openai/gpt-4o-m
 - [ ] Disable an upstream → tools gone from chat and MCP
 - [ ] Delete woo-mcp pod → dashboard **unreachable**; utils/notes still work
 - [ ] Audit shows each call with the right user
+- [ ] Two extra stores: chat compares today’s orders; delete one → tools and namespace gone
 
 ## Scripts
 

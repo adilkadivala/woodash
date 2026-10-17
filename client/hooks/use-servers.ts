@@ -3,16 +3,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, MOCK_SERVERS } from "@/lib/api"
 import { useMockApi } from "@/lib/gateway"
+import { useMe } from "@/hooks/use-me"
 import type { UpstreamServer } from "@/types/api"
 import { toast } from "sonner"
 
 export function useServers() {
   const queryClient = useQueryClient()
+  const { user } = useMe()
 
   const { data, isLoading, error, refetch } = useQuery<{ servers: UpstreamServer[] }>({
     queryKey: ["servers"],
     queryFn: () => api<{ servers: UpstreamServer[] }>("/servers"),
-    refetchInterval: 10000, // Poll every 10s as specified in architecture doc
+    enabled: !!user,
+    refetchInterval: (query) => {
+      if (!user) return false
+      const status = (query.state.error as { status?: number } | null)?.status
+      if (status === 401) return false
+      return 10000
+    },
   })
 
   const servers = data?.servers ?? (useMockApi ? MOCK_SERVERS : [])

@@ -24,9 +24,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (hasSession && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", req.url))
-  }
+  // Do not bounce /login → / just because `sid` exists: a stale cookie
+  // would trap the user on the app shell forever.
 
   return NextResponse.next()
 }

@@ -8,7 +8,8 @@
 | **Dashboard (`client/`)** | Next.js UI; proxies `/api/*` to gateway |
 | **woo-mcp** | Streamable HTTP MCP → WooCommerce REST (`WOO_USE_MOCK=false` in cluster/compose) |
 | **utils-mcp / notes-mcp** | Extra upstreams for multi-server demos |
-| **PostgreSQL** | Users, keys (hashed), upstream registry, encrypted credentials, audit, chat history |
+| **PostgreSQL** | Users, keys (hashed), upstream registry, encrypted credentials, audit, chat history, stores |
+| **Store chart (`charts/store`)** | Per-tenant namespace: MariaDB, WordPress/Woo, Woo MCP, Ingress, quota, NetworkPolicies |
 
 ## Tool aggregation and routing
 
@@ -33,6 +34,17 @@ Same Helm chart: `charts/platform` with `values-local.yaml` vs `values-prod.yaml
 | Secrets | `secrets.local.yaml` → K8s Secrets | `secrets.prod.yaml` / sealed secrets |
 | Woo MCP | ClusterIP; REST to `http://wordpress` + `Host: store…` | same pattern, https public host |
 | Images | `kind load` `*:local` | registry + tag in values-prod |
+
+## Multi-store provisioning
+
+The gateway worker watches `stores` rows in `provisioning` / `deleting`. Create from `POST /api/stores` (dashboard **Stores**):
+
+1. Persist the row and generate Woo REST + MCP + DB secrets (AES-GCM in `stores.secrets_enc`).
+2. `helm upgrade --install store-{slug} charts/store -n store-{slug} --create-namespace --wait`.
+3. Register upstream `woo-{slug}` at `http://woo-mcp.store-{slug}.svc.cluster.local:4011/mcp`.
+4. Timeouts mark **Failed**; retry is the same Helm release (idempotent). Delete uninstalls Helm and the namespace.
+
+Several stores provision in parallel. Isolation is NetworkPolicy plus separate PVCs/DBs per namespace.
 
 ## Prisma
 
