@@ -104,13 +104,13 @@ export async function listOrders(limit = 20, status?: string, range: DateRange =
   if (useMock) {
     seedDemoOrder();
     let rows = mockListOrders(100);
-    if (status) rows = rows.filter((o) => o.status === status);
+    if (status && status !== 'any') rows = rows.filter((o) => o.status === status);
     if (after) rows = rows.filter((o) => Date.parse(o.date_created) >= Date.parse(after));
     if (before) rows = rows.filter((o) => Date.parse(o.date_created) < Date.parse(before));
     return rows.slice(0, limit);
   }
   const params = new URLSearchParams({ per_page: String(Math.min(limit, 100)) });
-  if (status) params.set('status', status);
+  params.set('status', status || 'any');
   if (after) params.set('after', after);
   if (before) params.set('before', before);
   const data = await wooFetch(`/orders?${params}`);

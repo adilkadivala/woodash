@@ -49,7 +49,10 @@ function buildMcpServer(): McpServer {
         'For "orders today" pass after = today\'s date (YYYY-MM-DD).',
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional(),
-        status: z.enum(ORDER_STATUSES).optional(),
+        status: z
+          .enum([...ORDER_STATUSES, 'any'])
+          .optional()
+          .describe('Order status filter; omit or "any" for all statuses'),
         after: z
           .string()
           .optional()
