@@ -2,6 +2,7 @@ import type { Principal } from '../auth/principal.js';
 import { decodeToolName } from '../aggregator/naming.js';
 import { checkPolicy } from '../policy/engine.js';
 import { writeAuditLog } from '../audit/audit.js';
+import { toolCallLimiter } from '../security/rateLimit.js';
 import type { UpstreamManager } from '../upstream/manager.js';
 
 /**
@@ -51,6 +52,26 @@ export async function executeTool(
 
     serverSlug = decoded.slug;
     toolName = decoded.tool;
+
+    // Per-user budget shared by MCP and chat, so one member can't starve the upstreams.
+    if (!toolCallLimiter.hit(principal.userId)) {
+      const retry = toolCallLimiter.retryAfterSec(principal.userId);
+      await writeAuditLog({
+        principal,
+        via: opts.via,
+        serverSlug,
+        toolName,
+        args,
+        outcome: 'denied',
+        errorCode: 'RATE_LIMITED',
+        errorMessage: `Tool-call rate limit exceeded; retry in ${retry}s`,
+        durationMs: Date.now() - startTime,
+      });
+      return {
+        content: [{ type: 'text', text: `Rate limit exceeded: too many tool calls. Retry in ${retry}s.` }],
+        isError: true,
+      };
+    }
 
     // 2. Server exists? Enabled? Breaker closed?
     const client = manager.getClient(serverSlug);

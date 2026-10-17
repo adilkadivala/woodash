@@ -20,7 +20,8 @@ export function generateStoreSecrets(slug: string): StoreSecrets {
     wordpressAdminPassword: crypto.randomBytes(12).toString('base64url'),
     wordpressAdminEmail: `admin@${slug}.store.local`,
     wooConsumerKey: `ck_${crypto.randomBytes(20).toString('hex')}`,
-    wooConsumerSecret: `cs_${crypto.randomBytes(21).toString('hex')}`,
+    // woocommerce_api_keys.consumer_secret is char(43): "cs_" + 40 hex, longer gets truncated
+    wooConsumerSecret: `cs_${crypto.randomBytes(20).toString('hex')}`,
     wooMcpToken: crypto.randomBytes(32).toString('hex'),
   };
 }

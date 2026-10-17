@@ -1,3 +1,13 @@
+{{- /*
+Store provisioner RBAC (least privilege):
+- Cluster-wide the gateway may only manage namespaces and create RoleBindings
+  that reference the store-manager role (bind is restricted by resourceNames).
+- Everything else (secrets, deployments, ...) is granted per store namespace by
+  a RoleBinding the provisioner creates in that namespace.
+- A ValidatingAdmissionPolicy limits those namespace/RoleBinding writes to
+  namespaces labelled urumi.ai/kind=store, so the gateway cannot grant itself
+  access to kube-system or the platform namespace.
+*/ -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -15,18 +25,13 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [""]
-    resources: [secrets, configmaps, services, pods, pods/log, events, persistentvolumeclaims, serviceaccounts, resourcequotas, limitranges]
-    verbs: ["*"]
-  - apiGroups: [apps]
-    resources: [deployments, replicasets]
-    verbs: ["*"]
-  - apiGroups: [batch]
-    resources: [jobs]
-    verbs: ["*"]
-  - apiGroups: [networking.k8s.io]
-    resources: [ingresses, networkpolicies]
-    verbs: ["*"]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    verbs: [get, create, update, patch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [bind]
+    resourceNames: [gateway-store-manager]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -42,3 +47,74 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: gateway-store-provisioner
+---
+# Granted only inside store namespaces, via a RoleBinding (never a ClusterRoleBinding).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gateway-store-manager
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets, configmaps, services, persistentvolumeclaims, serviceaccounts, resourcequotas, limitranges]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events, endpoints]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+{{- if .Values.rbac.admissionPolicy }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: gateway-store-namespaces-only
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [namespaces]
+      - apiGroups: [rbac.authorization.k8s.io]
+        apiVersions: ["v1"]
+        operations: [CREATE, UPDATE]
+        resources: [rolebindings]
+  matchConditions:
+    - name: is-gateway
+      expression: request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:gateway"
+  validations:
+    - expression: >-
+        request.resource.resource != "namespaces" ||
+        (request.operation == "DELETE"
+          ? (has(oldObject.metadata.labels) && oldObject.metadata.labels[?"urumi.ai/kind"].orValue("") == "store")
+          : (has(object.metadata.labels) && object.metadata.labels[?"urumi.ai/kind"].orValue("") == "store"))
+      message: gateway may only create, change or delete namespaces labelled urumi.ai/kind=store
+    - expression: >-
+        request.resource.resource != "rolebindings" ||
+        (namespaceObject != null && has(namespaceObject.metadata.labels) &&
+         namespaceObject.metadata.labels[?"urumi.ai/kind"].orValue("") == "store" &&
+         object.roleRef.kind == "ClusterRole" && object.roleRef.name == "gateway-store-manager")
+      message: gateway may only bind gateway-store-manager inside store namespaces
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: gateway-store-namespaces-only
+  labels:
+    {{- include "platform.labels" . | nindent 4 }}
+spec:
+  policyName: gateway-store-namespaces-only
+  validationActions: [Deny]
+{{- end }}

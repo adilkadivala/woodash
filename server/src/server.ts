@@ -24,6 +24,8 @@ import type { UpstreamManager } from './upstream/manager.js';
  */
 export function createApp(manager: UpstreamManager): express.Express {
   const app = express();
+  // One hop (ingress) in front of us; lets req.ip be the client for login rate limiting.
+  app.set('trust proxy', 1);
 
   // ─── Global middleware ───
   app.use(helmet({ contentSecurityPolicy: false }));

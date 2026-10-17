@@ -78,6 +78,7 @@ const configSchema = z.object({
   MAX_STORES_PER_USER: z.coerce.number().default(3),
   STORE_PROVISION_TIMEOUT_SEC: z.coerce.number().default(600),
   GATEWAY_NAMESPACE: z.string().default('platform'),
+  GATEWAY_SERVICE_ACCOUNT: z.string().default('gateway'),
   WOO_MCP_IMAGE: z.string().default('mcp-woo:local'),
   WORDPRESS_IMAGE: z.string().default('wordpress:6.7.2-php8.2-apache'),
   WORDPRESS_CLI_IMAGE: z.string().default('wordpress:cli-2.11'),

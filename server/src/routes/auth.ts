@@ -7,6 +7,7 @@ import { parseCookie } from 'cookie';
 import { hashPassword, verifyPassword } from '../auth/passwords.js';
 import { createSession, deleteSession } from '../auth/sessions.js';
 import { requireAuth } from '../auth/middleware.js';
+import { loginLimiter } from '../security/rateLimit.js';
 
 const router = Router();
 
@@ -19,6 +20,13 @@ router.post('/login', async (req, res) => {
 
   if (!email || !password) {
     res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email and password are required' } });
+    return;
+  }
+
+  const limitKey = `${req.ip}|${String(email).toLowerCase()}`;
+  if (!loginLimiter.hit(limitKey)) {
+    res.setHeader('Retry-After', String(loginLimiter.retryAfterSec(limitKey)));
+    res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again later.' } });
     return;
   }
 

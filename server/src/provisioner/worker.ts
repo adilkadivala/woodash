@@ -49,13 +49,38 @@ async function ensureSecrets(storeId: string): Promise<ReturnType<typeof generat
   return secrets;
 }
 
-async function labelNamespace(namespace: string, slug: string): Promise<void> {
-  const result = await runKubectl(
-    ['label', 'namespace', namespace, 'urumi.ai/kind=store', `urumi.ai/store=${slug}`, '--overwrite'],
-    30_000,
-  );
-  if (result.code !== 0) {
-    console.warn(`[provisioner] label ${namespace}: ${result.stderr.trim()}`);
+/**
+ * Create the store namespace (labelled, so the admission policy lets us touch it)
+ * and bind gateway-store-manager in it. RBAC grants the gateway nothing else
+ * outside namespace management, so this must run before helm.
+ */
+async function prepareNamespace(namespace: string, slug: string): Promise<void> {
+  const manifest = {
+    apiVersion: 'v1',
+    kind: 'List',
+    items: [
+      {
+        apiVersion: 'v1',
+        kind: 'Namespace',
+        metadata: { name: namespace, labels: { 'urumi.ai/kind': 'store', 'urumi.ai/store': slug } },
+      },
+      {
+        apiVersion: 'rbac.authorization.k8s.io/v1',
+        kind: 'RoleBinding',
+        metadata: { name: 'gateway-store-manager', namespace },
+        roleRef: { apiGroup: 'rbac.authorization.k8s.io', kind: 'ClusterRole', name: 'gateway-store-manager' },
+        subjects: [{ kind: 'ServiceAccount', name: config.GATEWAY_SERVICE_ACCOUNT, namespace: config.GATEWAY_NAMESPACE }],
+      },
+    ],
+  };
+  const dir = await mkdtemp(join(tmpdir(), 'store-ns-'));
+  const file = join(dir, 'ns.json');
+  try {
+    await writeFile(file, JSON.stringify(manifest), { mode: 0o600 });
+    const result = await runKubectl(['apply', '-f', file], 30_000);
+    if (result.code !== 0) throw new Error(`prepare namespace ${namespace}: ${result.stderr.trim()}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
@@ -90,6 +115,7 @@ async function helmUpgrade(store: {
   };
 
   try {
+    await prepareNamespace(store.namespace, store.slug);
     await writeFile(valuesPath, JSON.stringify(values), { mode: 0o600 });
     const result = await runHelm(
       [
@@ -99,7 +125,6 @@ async function helmUpgrade(store: {
         chartPath(),
         '-n',
         store.namespace,
-        '--create-namespace',
         '-f',
         valuesPath,
         '--wait',
@@ -111,7 +136,6 @@ async function helmUpgrade(store: {
     if (result.code !== 0) {
       throw new Error(result.stderr.trim() || result.stdout.trim() || `helm exited ${result.code}`);
     }
-    await labelNamespace(store.namespace, store.slug);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
