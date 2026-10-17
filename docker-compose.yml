@@ -144,6 +144,8 @@ services:
         required: false
     environment:
       PORT: 4000
+      # Dev stack with fixed dev secrets; production (Helm) refuses these defaults.
+      NODE_ENV: development
       DATABASE_URL: postgresql://gateway:gateway@postgres:5432/gateway
       SESSION_SECRET: dev-session-secret-change-in-production-please!!
       CREDENTIAL_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

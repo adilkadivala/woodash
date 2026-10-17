@@ -1,3 +1,5 @@
+> **Note:** early planning document, kept for history. The current design is in [README.md](README.md), [docs/system-design.md](docs/system-design.md) and [docs/threat-model.md](docs/threat-model.md); some sections below describe ideas that were changed or not built.
+
 # MCP Gateway Dashboard: Frontend Architecture
 
 Stack: **Next.js (App Router) + TypeScript + shadcn/ui** (already set up).

@@ -24,18 +24,35 @@ export function createKeysRouter(): Router {
 
     const keys = await prisma.apiKey.findMany({
       where,
-      select: { id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true, revokedAt: true, userId: true }
+      select: {
+        id: true, name: true, keyPrefix: true, createdAt: true, lastUsedAt: true, revokedAt: true, userId: true,
+        user: { select: { email: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
     });
     res.json({ keys });
   });
 
   router.post('/', async (req, res) => {
-    const { name } = req.body;
+    const { name, userId } = req.body;
     if (!name) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Name is required' } });
     }
 
-    const { key, plaintext } = await generateApiKey(req.principal!.userId, name);
+    // Admins may issue a key for a team member (plaintext is shown once, to the admin).
+    let ownerId = req.principal!.userId;
+    if (userId && userId !== ownerId) {
+      if (req.principal!.role !== 'admin') {
+        return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only admins can issue keys for other users' } });
+      }
+      const owner = await prisma.user.findUnique({ where: { id: userId } });
+      if (!owner || owner.disabled) {
+        return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found or disabled' } });
+      }
+      ownerId = owner.id;
+    }
+
+    const { key, plaintext } = await generateApiKey(ownerId, name);
     res.status(201).json({ key, plaintext });
   });
 

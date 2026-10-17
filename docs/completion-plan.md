@@ -3,19 +3,21 @@
 _Audit date: 2026-10-17. Deadline: not stated in problem-statement.md ("two weeks").
 First commit is 2026-10-12 → assumed deadline **~2026-10-24/26**. Confirm the real date from the invite email._
 
-## Where we stand
+## Status (updated 2026-10-17, evening)
 
-| Area | Status |
-|---|---|
-| Gateway (CRUD upstreams, aggregation, `slug__tool` collisions, creds encrypted + never returned, audit, roles, hashed revocable keys, invites) | ✅ Done in code, typechecks clean |
-| 3 upstreams (woo, utils, notes) seeded, woo first | ✅ |
-| Woo MCP (5 tools, Streamable HTTP, REST API) | ✅ except **no date filter on list_orders** |
-| Chat agent (OpenAI-compatible tool loop via gateway, acts as user) | ✅ core; tool cards not persisted, SSE buffered by proxy |
-| Helm charts (local/prod values, PVCs, Ingress, probes, limits, Secrets, default-deny NetPols) | ✅ lint + render clean |
-| Bonus multi-store (helm-based provisioner, auto-registration, quota, teardown, retry) | 🟡 Mostly done — **all uncommitted** |
-| **Actually running on Kubernetes** | ❌ Not deployed; DoD flow never run end-to-end on Kind |
-| Docs (README client setup, order/chat walkthrough, bonus list, honest threat model) | 🟡 Thin / some overclaims |
-| Demo video, submission | ❌ |
+Done and verified on Kind:
+- All definition-of-done flows: COD checkout + WP admin, chat creates product, "orders today",
+  user B via Claude Code, cross-server prompt (woo + utils + notes), revoke, disable, dead pod, audit attribution.
+- Code fixes: date filter, upstream timeouts/parallel health, MCP 202 notifications, non-root images,
+  graceful shutdown, real metrics chart, audit pagination, rate limits, prod default-secret guard,
+  admin team-keys (issue/revoke), least-privilege RBAC + admission policy, store REST key bug.
+- Bonus: store provisioning + teardown verified end to end.
+- Docs: README, system design, threat model, bonus list rewritten.
+
+Remaining:
+1. Push repo to GitHub.
+2. Demo video (script + record).
+3. Optional: VPS k3s deploy; compare-two-stores demo; tool-policy UI.
 
 ## P0 — must have (DoD blockers)
 

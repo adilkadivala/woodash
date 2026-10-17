@@ -94,6 +94,17 @@ function loadConfig(): Config {
     console.error(z.prettifyError(result.error));
     process.exit(1);
   }
+  if (result.data.NODE_ENV === 'production') {
+    // Dev defaults above exist so `bun run dev` works out of the box; never ship them.
+    const defaults = configSchema.parse({ DATABASE_URL: 'x' });
+    const insecure = (
+      ['CREDENTIAL_ENC_KEY', 'BOOTSTRAP_ADMIN_PASSWORD', 'WOO_MCP_TOKEN', 'NOTES_MCP_TOKEN'] as const
+    ).filter((k) => result.data[k] === defaults[k]);
+    if (insecure.length) {
+      console.error(`❌ Refusing to start in production with default values for: ${insecure.join(', ')}`);
+      process.exit(1);
+    }
+  }
   return result.data;
 }
 
