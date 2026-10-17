@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dotenv from 'dotenv';
 import * as z from 'zod/v4';
-import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
+import { createMcpHttpApp, listenWithGracefulShutdown } from '../../mcp-servers/shared/createServer.js';
 import * as woo from './wooClient.js';
 
 dotenv.config();
@@ -123,6 +123,5 @@ app.get('/readyz', async (req, res) => {
   }
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[woo-mcp] listening on http://0.0.0.0:${port}/mcp (mock=${process.env.WOO_USE_MOCK !== 'false'})`);
-});
+listenWithGracefulShutdown(app, port, 'woo-mcp');
+console.log(`[woo-mcp] mode: ${process.env.WOO_USE_MOCK !== 'false' ? 'mock' : 'rest'}`);

@@ -46,13 +46,76 @@ export function createAuditRouter(): Router {
       },
     });
 
+    // Fetched one extra row to detect another page. The cursor is the last row we
+    // return (the query skips the cursor row itself), so nothing is dropped.
     let nextCursor: number | undefined;
     if (logs.length > queryLimit) {
-      const nextItem = logs.pop()!;
-      nextCursor = nextItem.id;
+      logs.pop();
+      nextCursor = logs[logs.length - 1].id;
     }
 
     res.json({ logs, cursor: nextCursor });
+  });
+
+  /**
+   * GET /stats - Tool-call metrics for the overview: calls per day (success vs
+   * failed) and per-server volume, error rate and latency. Same visibility as
+   * the log itself (members see their own calls).
+   */
+  router.get('/stats', requireAuth, async (req, res) => {
+    const days = Math.min(Math.max(parseInt(req.query.days as string) || 14, 1), 90);
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setUTCDate(since.getUTCDate() - (days - 1));
+
+    const where: any = { ts: { gte: since } };
+    if (req.principal!.role !== 'admin') where.userId = req.principal!.userId;
+
+    const rows = await prisma.auditLog.findMany({
+      where,
+      select: { ts: true, serverSlug: true, outcome: true, durationMs: true },
+      orderBy: { id: 'desc' },
+      take: 50_000,
+    });
+
+    const daily = new Map<string, { date: string; success: number; failed: number }>();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(since);
+      d.setUTCDate(since.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      daily.set(key, { date: key, success: 0, failed: 0 });
+    }
+
+    const perServer = new Map<string, { calls: number; errors: number; durations: number[] }>();
+    for (const r of rows) {
+      const bucket = daily.get(r.ts.toISOString().slice(0, 10));
+      const ok = r.outcome === 'success';
+      if (bucket) ok ? bucket.success++ : bucket.failed++;
+
+      const slug = r.serverSlug ?? '(unknown)';
+      const s = perServer.get(slug) ?? { calls: 0, errors: 0, durations: [] };
+      s.calls++;
+      if (!ok) s.errors++;
+      if (typeof r.durationMs === 'number') s.durations.push(r.durationMs);
+      perServer.set(slug, s);
+    }
+
+    const servers = [...perServer.entries()]
+      .map(([slug, s]) => {
+        const sorted = s.durations.sort((a, b) => a - b);
+        const pct = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] : 0);
+        return {
+          slug,
+          calls: s.calls,
+          errors: s.errors,
+          errorRate: s.calls ? s.errors / s.calls : 0,
+          p50Ms: pct(0.5),
+          p95Ms: pct(0.95),
+        };
+      })
+      .sort((a, b) => b.calls - a.calls);
+
+    res.json({ days, daily: [...daily.values()], servers, total: rows.length });
   });
 
   return router;

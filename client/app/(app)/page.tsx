@@ -10,7 +10,7 @@ import { HealthBanner } from "@/components/overview/health-banner"
 import { OverviewStatCards } from "@/components/overview/stat-cards"
 import { ChecklistCard } from "@/components/overview/checklist-card"
 import { RecentActivityTable } from "@/components/overview/recent-activity"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
+import { ToolCallsChart } from "@/components/overview/tool-calls-chart"
 
 export default function OverviewPage() {
   const { user, isAdmin } = useMe()
@@ -38,9 +38,9 @@ export default function OverviewPage() {
         members={members}
       />
 
-      {/* Interactive Tool Invocation Charts */}
+      {/* Tool-call volume, error rate and latency from the audit log */}
       <div className="px-4 lg:px-6">
-        <ChartAreaInteractive />
+        <ToolCallsChart />
       </div>
 
       {/* Recent Tool Executions */}

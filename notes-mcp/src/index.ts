@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dotenv from 'dotenv';
 import * as z from 'zod/v4';
-import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
+import { createMcpHttpApp, listenWithGracefulShutdown } from '../../mcp-servers/shared/createServer.js';
 import * as store from './store.js';
 
 
@@ -65,6 +65,4 @@ const app = createMcpHttpApp({
   createServer: buildMcpServer,
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[notes-mcp] listening on http://0.0.0.0:${port}/mcp`);
-});
+listenWithGracefulShutdown(app, port, 'notes-mcp');
