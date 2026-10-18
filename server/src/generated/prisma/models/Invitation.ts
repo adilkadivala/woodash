@@ -425,10 +425,6 @@ export type InvitationUncheckedUpdateManyWithoutInviterNestedInput = {
   deleteMany?: Prisma.InvitationScalarWhereInput | Prisma.InvitationScalarWhereInput[]
 }
 
-export type NullableDateTimeFieldUpdateOperationsInput = {
-  set?: Date | string | null
-}
-
 export type InvitationCreateWithoutInviterInput = {
   id?: string
   email: string

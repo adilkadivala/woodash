@@ -74,7 +74,7 @@ dashboard:
     limits: { cpu: 500m, memory: 512Mi }
 
 wooMcp:
-  port: 4001
+  port: 4011
   resources:
     requests: { cpu: 25m, memory: 64Mi }
     limits: { cpu: 250m, memory: 256Mi }
@@ -97,10 +97,25 @@ networkPolicy:
   ingressNamespace: ingress-nginx
   ingressPodLabels:
     app.kubernetes.io/name: ingress-nginx
+  # kube-apiserver endpoint port (Kind and k3s both use 6443)
+  apiServerPort: 6443
 
 llm:
   model: openai/gpt-4o-mini
   baseUrl: https://openrouter.ai/api/v1
+  # TCP port the gateway may egress to for the LLM (443 for hosted providers)
+  egressPort: 443
+
+rbac:
+  # ValidatingAdmissionPolicy (k8s >= 1.30) confining the gateway's namespace and
+  # RoleBinding writes to store namespaces. Disable on older clusters.
+  admissionPolicy: true
+
+storeProvisioning:
+  chartPath: /charts/store
+  hostSuffix: localtest.me
+  maxStoresPerUser: 3
+  timeoutSec: 600
 
 # Filled by secrets file (see secrets.example.yaml)
 secrets:

@@ -29,6 +29,7 @@ import { RevealOnceDialog } from "@/components/shared/reveal-once-dialog"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { CopyButton } from "@/components/shared/copy-button"
 import { RelativeTime } from "@/components/shared/relative-time"
+import { TeamKeysCard } from "@/components/keys/team-keys-card"
 import {
   KeyRoundIcon,
   PlusIcon,
@@ -263,6 +264,8 @@ export default function ApiKeysPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {isAdmin && <TeamKeysCard />}
 
       {/* Mint Key Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

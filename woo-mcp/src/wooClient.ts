@@ -15,15 +15,24 @@ function wooBase(): string {
   return `${base}/wp-json/wc/v3`;
 }
 
-function authQuery(): string {
+function consumerKey(): string {
   const key = process.env.WOO_CONSUMER_KEY;
+  if (!key) throw new Error('WOO_CONSUMER_KEY required');
+  return key;
+}
+
+function consumerSecret(): string {
   const secret = process.env.WOO_CONSUMER_SECRET;
-  if (!key || !secret) throw new Error('WOO_CONSUMER_KEY / WOO_CONSUMER_SECRET required');
-  return `consumer_key=${encodeURIComponent(key)}&consumer_secret=${encodeURIComponent(secret)}`;
+  if (!secret) throw new Error('WOO_CONSUMER_SECRET required');
+  return secret;
 }
 
 function storeHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = Buffer.from(`${consumerKey()}:${consumerSecret()}`).toString('base64');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Basic ${token}`,
+  };
   // Public site URL may differ from the in-cluster service URL. Send the
   // public Host so WordPress REST matches WP_HOME / WP_SITEURL.
   if (process.env.WOO_STORE_HOST) {
@@ -35,7 +44,8 @@ function storeHeaders(): Record<string, string> {
 }
 
 async function wooFetch(path: string, init?: RequestInit): Promise<unknown> {
-  const url = `${wooBase()}${path}${path.includes('?') ? '&' : '?'}${authQuery()}`;
+  const qs = `consumer_key=${encodeURIComponent(consumerKey())}&consumer_secret=${encodeURIComponent(consumerSecret())}`;
+  const url = `${wooBase()}${path}${path.includes('?') ? '&' : '?'}${qs}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {
@@ -79,15 +89,31 @@ export async function createProduct(input: {
   return projectProduct(data);
 }
 
-export async function listOrders(limit = 20, status?: string): Promise<unknown> {
+export type DateRange = { after?: string; before?: string };
+
+/** Accepts YYYY-MM-DD or a full ISO datetime; WooCommerce wants a datetime. */
+function toIsoDateTime(value: string, label: string): string {
+  const v = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  if (Number.isNaN(Date.parse(v))) throw new Error(`Invalid ${label} date: ${value}`);
+  return v;
+}
+
+export async function listOrders(limit = 20, status?: string, range: DateRange = {}): Promise<unknown> {
+  const after = range.after ? toIsoDateTime(range.after, 'after') : undefined;
+  const before = range.before ? toIsoDateTime(range.before, 'before') : undefined;
   if (useMock) {
     seedDemoOrder();
-    let rows = mockListOrders(limit);
-    if (status) rows = rows.filter((o) => o.status === status);
-    return rows;
+    let rows = mockListOrders(100);
+    if (status && status !== 'any') rows = rows.filter((o) => o.status === status);
+    if (after) rows = rows.filter((o) => Date.parse(o.date_created) >= Date.parse(after));
+    if (before) rows = rows.filter((o) => Date.parse(o.date_created) < Date.parse(before));
+    return rows.slice(0, limit);
   }
-  const q = status ? `&status=${encodeURIComponent(status)}` : '';
-  const data = await wooFetch(`/orders?per_page=${Math.min(limit, 100)}${q}`);
+  const params = new URLSearchParams({ per_page: String(Math.min(limit, 100)) });
+  params.set('status', status || 'any');
+  if (after) params.set('after', after);
+  if (before) params.set('before', before);
+  const data = await wooFetch(`/orders?${params}`);
   return (data as unknown[]).map(projectOrder);
 }
 

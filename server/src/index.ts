@@ -4,6 +4,7 @@ import { seed } from './seed.js';
 import { createApp } from './server.js';
 import { UpstreamManager } from './upstream/manager.js';
 import { startHealthLoop, stopHealthLoop } from './upstream/health.js';
+import { startStoreWorker } from './provisioner/worker.js';
 
 /**
  * Boot sequence:
@@ -25,6 +26,7 @@ async function main(): Promise<void> {
 
   // 3. Start health-check loop (every 30s)
   const healthTimer = startHealthLoop(manager);
+  const storeTimer = startStoreWorker(manager);
 
   // 4. Create and start Express app
   const app = createApp(manager);
@@ -42,6 +44,7 @@ async function main(): Promise<void> {
 
     // Stop health loop
     stopHealthLoop(healthTimer);
+    clearInterval(storeTimer);
 
     // Close HTTP server
     server.close();

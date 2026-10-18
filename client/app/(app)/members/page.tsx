@@ -133,7 +133,7 @@ export default function MembersPage() {
               </TableHeader>
               <TableBody>
                 {members.map((member) => {
-                  const isSelf = member.id === currentUser.id
+                  const isSelf = currentUser != null && member.id === currentUser.id
                   return (
                     <TableRow key={member.id} className="text-xs">
                       <TableCell className="font-semibold text-foreground">

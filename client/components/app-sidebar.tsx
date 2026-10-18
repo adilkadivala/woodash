@@ -23,6 +23,7 @@ import {
   UsersIcon,
   SettingsIcon,
   LayersIcon,
+  StoreIcon,
 } from "lucide-react"
 import { useMe } from "@/hooks/use-me"
 import { useServers } from "@/hooks/use-servers"
@@ -43,6 +44,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       title: "Chat Agent",
       url: "/chat",
       icon: MessageSquareIcon,
+    },
+    {
+      title: "Stores",
+      url: "/stores",
+      icon: StoreIcon,
     },
     {
       title: "Upstream Servers",

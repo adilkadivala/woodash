@@ -42,7 +42,7 @@ export function createServersRouter(manager: UpstreamManager): Router {
         lastError: s.lastError,
         lastCheckedAt: s.lastCheckedAt,
         toolsDigest: s.toolsDigest,
-        toolCount: s.enabled ? await toolCountForSlug(manager, s.slug) : 0,
+        toolCount: s.enabled && s.status === 'connected' ? await toolCountForSlug(manager, s.slug) : 0,
       })),
     );
     res.json({ servers: result });

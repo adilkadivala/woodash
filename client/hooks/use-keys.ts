@@ -3,15 +3,18 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api, MOCK_KEYS } from "@/lib/api"
 import { useMockApi } from "@/lib/gateway"
+import { useMe } from "@/hooks/use-me"
 import type { ApiKey } from "@/types/api"
 import { toast } from "sonner"
 
 export function useKeys() {
   const queryClient = useQueryClient()
+  const { user } = useMe()
 
   const { data, isLoading, error, refetch } = useQuery<{ keys: ApiKey[] }>({
     queryKey: ["keys"],
     queryFn: () => api<{ keys: ApiKey[] }>("/keys"),
+    enabled: !!user,
   })
 
   const keys = data?.keys ?? (useMockApi ? MOCK_KEYS : [])

@@ -47,12 +47,12 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="prof-name">Full Name</Label>
-              <Input id="prof-name" value={user.name} readOnly className="bg-muted/40 font-medium" />
+              <Input id="prof-name" value={user?.name ?? ""} readOnly className="bg-muted/40 font-medium" />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="prof-email">Email Address</Label>
-              <Input id="prof-email" value={user.email} readOnly className="bg-muted/40 font-mono" />
+              <Input id="prof-email" value={user?.email ?? ""} readOnly className="bg-muted/40 font-mono" />
             </div>
           </div>
 
@@ -65,7 +65,7 @@ export default function SettingsPage() {
             </div>
             <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
               <ShieldCheckIcon className="size-3 mr-1 text-primary" />
-              {user.role}
+              {user?.role ?? "—"}
             </Badge>
           </div>
         </CardContent>

@@ -1,6 +1,23 @@
 export type Role = "admin" | "member"
 export type ServerStatus = "connected" | "unreachable" | "disabled"
 export type Outcome = "success" | "error" | "denied" | "timeout"
+export type StoreStatus = "provisioning" | "ready" | "failed" | "deleting"
+
+export interface Store {
+  id: string
+  slug: string
+  name: string
+  namespace: string
+  host: string
+  storefrontUrl: string
+  status: StoreStatus
+  lastError: string | null
+  mcpSlug: string | null
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  provisionedAt: string | null
+}
 
 export interface User {
   id: string

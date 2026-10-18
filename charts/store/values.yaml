@@ -1,0 +1,69 @@
+# Overridden by the gateway provisioner. Do not put live secrets in git.
+
+store:
+  slug: example
+  name: Example Store
+  host: example.localtest.me
+
+ingress:
+  enabled: true
+  className: nginx
+  tls: false
+  clusterIssuer: ""
+
+storageClass: standard
+
+images:
+  wordpress: wordpress:6.7.2-php8.2-apache
+  wordpressCli: wordpress:cli-2.11
+  mariadb: mariadb:11.4
+  wooMcp:
+    repository: mcp-woo
+    tag: local
+    pullPolicy: IfNotPresent
+
+wordpress:
+  port: 80
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+mariadb:
+  port: 3306
+  database: wordpress
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+wooMcp:
+  port: 4011
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+quota:
+  pods: "12"
+  persistentvolumeclaims: "4"
+  requestsCpu: "2"
+  requestsMemory: 3Gi
+  limitsCpu: "4"
+  limitsMemory: 6Gi
+  requestsStorage: 20Gi
+
+gateway:
+  namespace: platform
+
+networkPolicy:
+  ingressNamespace: ingress-nginx
+  ingressPodLabels:
+    app.kubernetes.io/name: ingress-nginx
+
+secrets:
+  mariadbRootPassword: ""
+  mariadbPassword: ""
+  wordpressAdminUser: admin
+  wordpressAdminPassword: ""
+  wordpressAdminEmail: admin@store.local
+  wooConsumerKey: ""
+  wooConsumerSecret: ""
+  wooMcpToken: ""

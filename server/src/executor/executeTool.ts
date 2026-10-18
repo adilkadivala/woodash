@@ -2,6 +2,7 @@ import type { Principal } from '../auth/principal.js';
 import { decodeToolName } from '../aggregator/naming.js';
 import { checkPolicy } from '../policy/engine.js';
 import { writeAuditLog } from '../audit/audit.js';
+import { toolCallLimiter } from '../security/rateLimit.js';
 import type { UpstreamManager } from '../upstream/manager.js';
 
 /**
@@ -51,6 +52,26 @@ export async function executeTool(
 
     serverSlug = decoded.slug;
     toolName = decoded.tool;
+
+    // Per-user budget shared by MCP and chat, so one member can't starve the upstreams.
+    if (!toolCallLimiter.hit(principal.userId)) {
+      const retry = toolCallLimiter.retryAfterSec(principal.userId);
+      await writeAuditLog({
+        principal,
+        via: opts.via,
+        serverSlug,
+        toolName,
+        args,
+        outcome: 'denied',
+        errorCode: 'RATE_LIMITED',
+        errorMessage: `Tool-call rate limit exceeded; retry in ${retry}s`,
+        durationMs: Date.now() - startTime,
+      });
+      return {
+        content: [{ type: 'text', text: `Rate limit exceeded: too many tool calls. Retry in ${retry}s.` }],
+        isError: true,
+      };
+    }
 
     // 2. Server exists? Enabled? Breaker closed?
     const client = manager.getClient(serverSlug);
@@ -112,7 +133,8 @@ export async function executeTool(
       };
     }
 
-    // 4. Call upstream with timeout
+    // 4. Call upstream with timeout (reconnect lazily if the health loop dropped the session)
+    if (!client.isConnected()) await client.connect();
     const result = await callWithTimeout(client, toolName, args, 15_000);
 
     // Record breaker success
@@ -132,7 +154,7 @@ export async function executeTool(
     return result;
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    const isTimeout = error instanceof Error && error.message.includes('timeout');
+    const isTimeout = error instanceof Error && /time(d)? ?out/i.test(error.message);
     const outcome = isTimeout ? 'timeout' : 'error';
     const errorCode = isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR';
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -167,7 +189,7 @@ export async function executeTool(
  * Call an upstream tool with a timeout.
  */
 async function callWithTimeout(
-  client: { callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> },
+  client: { callTool(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<ToolResult> },
   toolName: string,
   args: Record<string, unknown>,
   timeoutMs: number,
@@ -178,7 +200,7 @@ async function callWithTimeout(
     }, timeoutMs);
 
     client
-      .callTool(toolName, args)
+      .callTool(toolName, args, timeoutMs)
       .then((result) => {
         clearTimeout(timer);
         resolve(result);

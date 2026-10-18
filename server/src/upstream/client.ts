@@ -1,6 +1,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
+/** Upper bound for connect/list so a hung upstream can't stall callers. */
+export const UPSTREAM_CONTROL_TIMEOUT_MS = Number(process.env.UPSTREAM_CONTROL_TIMEOUT_MS || 5000);
+
 /**
  * Wraps an MCP client connection to a single upstream server.
  * Handles auth headers, connection lifecycle, tool listing, and tool calling.
@@ -38,8 +41,13 @@ export class UpstreamClient {
       { capabilities: {} },
     );
 
-    await this.client.connect(this.transport);
-    this.connected = true;
+    try {
+      await this.client.connect(this.transport, { timeout: UPSTREAM_CONTROL_TIMEOUT_MS });
+      this.connected = true;
+    } catch (err) {
+      await this.disconnect();
+      throw err;
+    }
   }
 
   /**
@@ -49,7 +57,7 @@ export class UpstreamClient {
     if (!this.client || !this.connected) {
       throw new Error(`Not connected to upstream '${this.serverSlug}'`);
     }
-    const response = await this.client.listTools();
+    const response = await this.client.listTools(undefined, { timeout: UPSTREAM_CONTROL_TIMEOUT_MS });
     return (response.tools ?? []) as Array<{ name: string; description?: string; inputSchema?: unknown }>;
   }
 
@@ -59,11 +67,12 @@ export class UpstreamClient {
   async callTool(
     name: string,
     args: Record<string, unknown>,
+    timeoutMs?: number,
   ): Promise<{ content: Array<{ type: string; text?: string; [key: string]: unknown }>; isError?: boolean }> {
     if (!this.client || !this.connected) {
       throw new Error(`Not connected to upstream '${this.serverSlug}'`);
     }
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool({ name, arguments: args }, undefined, timeoutMs ? { timeout: timeoutMs } : undefined);
     return {
       content: (result.content ?? []) as Array<{ type: string; text?: string; [key: string]: unknown }>,
       isError: result.isError as boolean | undefined,

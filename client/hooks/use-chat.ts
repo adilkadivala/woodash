@@ -2,12 +2,15 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { useMe } from "@/hooks/use-me"
 import type { Conversation, Message } from "@/types/api"
 
 export function useConversations() {
+  const { user } = useMe()
   return useQuery({
     queryKey: ["conversations"],
     queryFn: () => api<{ conversations: Conversation[] }>("/chat/conversations"),
+    enabled: !!user,
   })
 }
 

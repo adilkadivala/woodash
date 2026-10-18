@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dotenv from 'dotenv';
 import * as z from 'zod/v4';
-import { createMcpHttpApp } from '../../mcp-servers/shared/createServer.js';
+import { createMcpHttpApp, listenWithGracefulShutdown } from '../../mcp-servers/shared/createServer.js';
 import * as woo from './wooClient.js';
 
 dotenv.config();
@@ -44,14 +44,27 @@ function buildMcpServer(): McpServer {
   server.registerTool(
     'list_orders',
     {
-      description: 'List recent orders (optionally filter by status).',
+      description:
+        'List recent orders, newest first. Filter by status and/or creation date range. ' +
+        'For "orders today" pass after = today\'s date (YYYY-MM-DD).',
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional(),
-        status: z.enum(ORDER_STATUSES).optional(),
+        status: z
+          .enum([...ORDER_STATUSES, 'any'])
+          .optional()
+          .describe('Order status filter; omit or "any" for all statuses'),
+        after: z
+          .string()
+          .optional()
+          .describe('Only orders created on/after this ISO 8601 date or datetime, e.g. 2026-10-17'),
+        before: z
+          .string()
+          .optional()
+          .describe('Only orders created before this ISO 8601 date or datetime'),
       },
     },
-    async ({ limit, status }) => {
-      const orders = await woo.listOrders(limit ?? 20, status);
+    async ({ limit, status, after, before }) => {
+      const orders = await woo.listOrders(limit ?? 20, status, { after, before });
       return { content: [{ type: 'text', text: JSON.stringify({ orders }, null, 2) }] };
     },
   );
@@ -88,13 +101,13 @@ function buildMcpServer(): McpServer {
   return server;
 }
 
-const port = Number(process.env.PORT || 4001);
+const port = Number(process.env.PORT || 4011);
 const app = createMcpHttpApp({
   bearerToken: process.env.MCP_BEARER_TOKEN || 'woo-mcp-bearer-token',
   createServer: buildMcpServer,
 });
 
-app.get('/readyz', async (_req, res) => {
+app.get('/readyz', async (req, res) => {
   if (process.env.WOO_USE_MOCK !== 'false') {
     res.json({ status: 'ready', mode: 'mock' });
     return;
@@ -110,6 +123,5 @@ app.get('/readyz', async (_req, res) => {
   }
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[woo-mcp] listening on http://0.0.0.0:${port}/mcp (mock=${process.env.WOO_USE_MOCK !== 'false'})`);
-});
+listenWithGracefulShutdown(app, port, 'woo-mcp');
+console.log(`[woo-mcp] mode: ${process.env.WOO_USE_MOCK !== 'false' ? 'mock' : 'rest'}`);

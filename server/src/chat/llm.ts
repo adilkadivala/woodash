@@ -22,31 +22,37 @@ export interface LlmResponse {
   finish_reason: string;
 }
 
-function isOpenRouter(): boolean {
-  const key = config.LLM_API_KEY;
-  const base = config.LLM_BASE_URL;
-  return key.startsWith('sk-or-') || base.includes('openrouter.ai');
-}
-
 function resolveBaseUrl(): string {
-  if (isOpenRouter()) return 'https://openrouter.ai/api/v1';
-  return (config.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  return (config.LLM_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/$/, '');
 }
 
 function resolveModel(): string {
-  const model = config.LLM_MODEL || 'openai/gpt-4o-mini';
-  if (isOpenRouter() && !model.includes('/')) {
-    return `openai/${model}`;
-  }
-  return model;
+  return config.LLM_MODEL || 'gpt-oss:120b-cloud';
+}
+
+function isOpenRouter(): boolean {
+  return resolveBaseUrl().includes('openrouter.ai');
+}
+
+function isLocalOllama(): boolean {
+  const base = resolveBaseUrl().toLowerCase();
+  return (
+    base.includes(':11434') ||
+    base.includes(':11435') ||
+    base.includes('ollama')
+  );
+}
+
+export function isLlmConfigured(): boolean {
+  return Boolean(config.LLM_API_KEY) || isLocalOllama();
 }
 
 export async function chatCompletion(
   messages: LlmMessage[],
   tools?: LlmTool[],
 ): Promise<LlmResponse> {
-  if (!config.LLM_API_KEY) {
-    throw new Error('LLM_API_KEY is not configured');
+  if (!isLlmConfigured()) {
+    throw new Error('LLM is not configured (set LLM_BASE_URL for Ollama or LLM_API_KEY)');
   }
 
   const payload: Record<string, unknown> = {
@@ -60,8 +66,10 @@ export async function chatCompletion(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${config.LLM_API_KEY}`,
   };
+  if (config.LLM_API_KEY) {
+    headers.Authorization = `Bearer ${config.LLM_API_KEY}`;
+  }
 
   if (isOpenRouter()) {
     headers['HTTP-Referer'] = config.CORS_ORIGIN || 'http://localhost:3000';

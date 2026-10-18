@@ -1,3 +1,5 @@
+> **Note:** early planning document, kept for history. The current design is in [README.md](README.md), [docs/system-design.md](docs/system-design.md) and [docs/threat-model.md](docs/threat-model.md); some sections below describe ideas that were changed or not built.
+
 # Backend Architecture: MCP Gateway Platform
 
 Scope: the **gateway backend**, the **WooCommerce MCP server**, and the **extra upstream MCP servers**.

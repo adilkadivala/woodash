@@ -1,4 +1,5 @@
 import express from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
@@ -18,7 +19,7 @@ export function createMcpHttpApp(options: {
   app.post('/mcp', async (req, res) => {
     if (options.bearerToken) {
       const auth = req.headers.authorization;
-      if (!auth?.startsWith('Bearer ') || auth.slice(7) !== options.bearerToken) {
+      if (!auth?.startsWith('Bearer ') || !safeEqual(auth.slice(7), options.bearerToken)) {
         res.status(401).json({ error: { message: 'Invalid bearer token' } });
         return;
       }
@@ -62,4 +63,29 @@ export function createMcpHttpApp(options: {
   });
 
   return app;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/**
+ * Listen and shut down promptly on SIGTERM: stop accepting, drop idle
+ * keep-alive sockets (so the gateway stops reusing a terminating pod),
+ * and exit once in-flight requests finish (hard stop after 10s).
+ */
+export function listenWithGracefulShutdown(app: express.Express, port: number, name: string): void {
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`[${name}] listening on http://0.0.0.0:${port}/mcp`);
+  });
+  const shutdown = (signal: string) => {
+    console.log(`[${name}] ${signal} received, shutting down`);
+    server.close(() => process.exit(0));
+    server.closeIdleConnections?.();
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }

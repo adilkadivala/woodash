@@ -310,7 +310,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       credentials: "same-origin",
     })
 
-    if (res.status === 401) {
+    if (res.status === 401 && path !== "/auth/login" && path !== "/auth/logout") {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("auth:expired"))
       }

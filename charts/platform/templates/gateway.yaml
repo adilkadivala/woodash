@@ -15,6 +15,7 @@ spec:
       labels:
         app: gateway
     spec:
+      serviceAccountName: gateway
       containers:
         - name: gateway
           image: "{{ .Values.images.gateway.repository }}:{{ .Values.images.gateway.tag }}"
@@ -55,6 +56,8 @@ spec:
               value: {{ .Values.llm.model | quote }}
             - name: LLM_BASE_URL
               value: {{ .Values.llm.baseUrl | quote }}
+            - name: WOO_MCP_PORT
+              value: {{ .Values.wooMcp.port | quote }}
             - name: WOO_MCP_URL
               value: "http://woo-mcp:{{ .Values.wooMcp.port }}/mcp"
             - name: UTILS_MCP_URL
@@ -67,6 +70,30 @@ spec:
               value: {{ .Values.ingress.tls | quote }}
             - name: SSRF_ALLOW_LOCALHOST
               value: "false"
+            - name: STORE_CHART_PATH
+              value: {{ .Values.storeProvisioning.chartPath | quote }}
+            - name: STORE_HOST_SUFFIX
+              value: {{ .Values.storeProvisioning.hostSuffix | quote }}
+            - name: STORE_INGRESS_CLASS
+              value: {{ .Values.ingress.className | quote }}
+            - name: STORE_STORAGE_CLASS
+              value: {{ .Values.storageClass | quote }}
+            - name: STORE_TLS
+              value: {{ .Values.ingress.tls | quote }}
+            - name: MAX_STORES_PER_USER
+              value: {{ .Values.storeProvisioning.maxStoresPerUser | quote }}
+            - name: STORE_PROVISION_TIMEOUT_SEC
+              value: {{ .Values.storeProvisioning.timeoutSec | quote }}
+            - name: GATEWAY_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: WOO_MCP_IMAGE
+              value: "{{ .Values.images.wooMcp.repository }}:{{ .Values.images.wooMcp.tag }}"
+            - name: WORDPRESS_IMAGE
+              value: {{ .Values.images.wordpress | quote }}
+            - name: WORDPRESS_CLI_IMAGE
+              value: {{ .Values.images.wordpressCli | quote }}
+            - name: MARIADB_IMAGE
+              value: {{ .Values.images.mariadb | quote }}
           {{- include "platform.resources" .Values.gateway.resources | nindent 10 }}
           livenessProbe:
             httpGet: { path: /healthz, port: http }

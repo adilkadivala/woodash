@@ -12,6 +12,10 @@ ingress:
 # k3s default provisioner
 storageClass: local-path
 
+# Extra stores get https://{slug}.stores.example.com — wildcard DNS/TLS recommended
+storeProvisioning:
+  hostSuffix: stores.example.com
+
 images:
   gateway: { repository: ghcr.io/example/mcp-gateway, tag: "1.0.0", pullPolicy: IfNotPresent }
   dashboard: { repository: ghcr.io/example/mcp-dashboard, tag: "1.0.0", pullPolicy: IfNotPresent }
